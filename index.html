@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vinicinho Doces — Painel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Lobster&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=funcoes-1">
+  <link rel="stylesheet" href="css/pages.css?v=editar-usuario-1">
+</head>
+<body>
+  <aside class="sidebar" id="sidebar">
+    <button class="mobile-close" id="mobileClose" aria-label="Fechar menu">×</button>
+    <a class="brand" href="#" aria-label="Vinicinho Doces"><img src="assets/logo-vinicinho-sem-fundo.png" alt="Vinicinho Doces"></a>
+    <nav>
+      <button class="nav-item active" data-page="Dashboard"><i data-lucide="house"></i><span>Dashboard</span></button>
+      <button class="nav-item" data-page="Vendas"><i data-lucide="shopping-cart"></i><span>Vendas</span></button>
+      <button class="nav-item" data-page="Contas a Receber"><i data-lucide="circle-dollar-sign"></i><span>Contas a Receber</span></button>
+      <button class="nav-item" data-page="Despesas"><i data-lucide="receipt-text"></i><span>Despesas</span></button>
+      <button class="nav-item" data-page="Contas a Pagar"><i data-lucide="wallet-cards"></i><span>Contas a Pagar</span></button>
+      <button class="nav-item" data-page="Caixa"><i data-lucide="landmark"></i><span>Caixa</span></button>
+      <button class="nav-item" data-page="Produtos"><i data-lucide="package"></i><span>Produtos</span></button>
+      <button class="nav-item" data-page="Produção"><i data-lucide="cooking-pot"></i><span>Produção</span></button>
+      <button class="nav-item" data-page="Clientes"><i data-lucide="users"></i><span>Clientes</span></button>
+      <button class="nav-item" data-page="Fornecedores"><i data-lucide="truck"></i><span>Fornecedores</span></button>
+      <button class="nav-item" data-page="Pontos de Venda"><i data-lucide="store"></i><span>Pontos de venda</span></button>
+      <button class="nav-item" data-page="Relatórios"><i data-lucide="chart-no-axes-column"></i><span>Relatórios</span></button>
+    </nav>
+    <button class="profile user-switch" id="userSwitch" type="button"><span class="user-avatar cartoon-avatar"></span><span class="user-copy"><strong>Vinicinho</strong><small>Administrador</small></span><i data-lucide="chevron-down"></i></button>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <button class="menu-toggle" id="menuToggle" aria-label="Abrir menu"><i data-lucide="menu"></i></button>
+      <div><h1 id="pageTitle">Vinicinho Doces</h1><p>Bem-vindo ao seu painel de gestão 👋</p></div>
+      <div class="top-actions">
+        <button class="date-button" id="dateButton"><i data-lucide="calendar-days"></i><span>01/05/2024 - 31/05/2024</span><i data-lucide="chevron-down"></i></button>
+        <button class="round-button notify" id="notifyButton" aria-label="Notificações"><i data-lucide="bell"></i><b>3</b></button>
+        <button class="round-button" id="settingsButton" aria-label="Configurações"><i data-lucide="settings"></i></button>
+      </div>
+    </header>
+
+    <div class="dashboard-grid">
+      <section class="primary-column">
+        <section class="hero">
+          <div class="hero-copy"><h2>Bem-vindo,<br>Vinicinho! <span>♥</span></h2><p>Tudo pronto para mais<br>um dia doce e produtivo.</p><button id="summaryButton">Ver resumo do dia <i data-lucide="arrow-right"></i></button></div>
+          <div class="hero-art"><img src="assets/logo-circular-sem-fundo.png" alt="Logo circular Vinicinho Doces"></div>
+          <span class="choco c1"></span><span class="choco c2"></span><span class="choco c3"></span>
+        </section>
+
+        <section class="metric-grid">
+          <article class="metric-card"><div class="metric-icon green"><i data-lucide="shopping-bag"></i></div><div><small>Pedidos</small><strong>132</strong><span>↑ 12,5%</span><em>vs mês anterior</em></div></article>
+          <article class="metric-card"><div class="metric-icon orange"><i data-lucide="tag"></i></div><div><small>Ticket médio</small><strong>R$ 186,97</strong><span>↑ 8,4%</span><em>vs mês anterior</em></div></article>
+          <article class="metric-card"><div class="metric-icon blue"><i data-lucide="users"></i></div><div><small>Clientes ativos</small><strong>87</strong><span>↑ 9,1%</span><em>vs mês anterior</em></div></article>
+          <article class="metric-card"><div class="metric-icon brown"><i data-lucide="package"></i></div><div><small>Produtos vendidos</small><strong>1.248</strong><span>↑ 14,7%</span><em>vs mês anterior</em></div></article>
+        </section>
+
+        <section class="charts-row">
+          <article class="card sales-chart"><div class="card-title"><h3>Evolução das vendas</h3><select><option>Diário</option><option>Semanal</option></select></div><div class="chart-wrap"><div class="y-labels"><span>R$ 30k</span><span>R$ 20k</span><span>R$ 10k</span><span>R$ 0</span></div><svg viewBox="0 0 500 145" preserveAspectRatio="none" aria-label="Gráfico de vendas"><defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f39a2b" stop-opacity=".35"/><stop offset="1" stop-color="#f39a2b" stop-opacity=".03"/></linearGradient></defs><g class="grid-lines"><path d="M0 10H500M0 47H500M0 84H500M0 121H500"/></g><path class="area" d="M10 102 L43 56 L76 63 L109 95 L142 95 L175 49 L208 94 L241 83 L274 32 L307 60 L340 77 L373 34 L406 78 L439 54 L472 34 L500 12 L500 122 L10 122Z"/><polyline points="10,102 43,56 76,63 109,95 142,95 175,49 208,94 241,83 274,32 307,60 340,77 373,34 406,78 439,54 472,34 500,12"/></svg><div class="x-labels"><span>01/05</span><span>06/05</span><span>11/05</span><span>16/05</span><span>21/05</span><span>26/05</span><span>31/05</span></div></div></article>
+          <article class="card channel-card"><h3>Vendas por canal</h3><div class="channel-content"><div class="donut channel"></div><div class="legend"><p><i class="dot brown-dot"></i>Loja física <b>55%</b><small>R$ 13.574,00</small></p><p><i class="dot green-dot"></i>WhatsApp <b>30%</b><small>R$ 7.404,00</small></p><p><i class="dot orange-dot"></i>iFood <b>15%</b><small>R$ 3.702,00</small></p></div></div></article>
+        </section>
+      </section>
+
+      <aside class="right-column">
+        <article class="card finance"><div class="card-title"><h3><span class="money">$</span> Resumo financeiro</h3><button>•••</button></div>
+          <div class="finance-row"><span class="round-icon orange"><i data-lucide="shopping-cart"></i></span><div><small>Vendas no período</small><strong>R$ 24.680,00</strong></div><em class="up">↑ 18,6%<small>vs mês anterior</small></em></div>
+          <div class="finance-row"><span class="round-icon green"><i data-lucide="banknote"></i></span><div><small>Recebimentos</small><strong>R$ 18.450,00</strong></div><em class="up">↑ 15,3%<small>vs mês anterior</small></em></div>
+          <div class="finance-row presale-finance-row"><span class="round-icon blue"><i data-lucide="clipboard-clock"></i></span><div><small>Total pré-vendas</small><strong>R$ 0,00</strong></div><em class="presale-info">Pendentes<small>no período</small></em></div>
+          <div class="finance-row"><span class="round-icon red"><i data-lucide="receipt-text"></i></span><div><small>Despesas</small><strong>R$ 6.230,00</strong></div><em class="down">↓ 8,7%<small>vs mês anterior</small></em></div>
+          <div class="finance-row profit"><span class="round-icon solid"><i data-lucide="circle-dollar-sign"></i></span><div><small>Lucro líquido</small><strong>R$ 12.220,00</strong></div><em class="up">↑ 21,4%<small>vs mês anterior</small></em></div>
+        </article>
+        <article class="card category"><div class="card-title"><h3>Despesas por categoria</h3><button>•••</button></div><div class="category-content"><div class="donut expense"><span>Total<br><b>R$ 6.230,00</b></span></div><div class="category-list"><p><i class="dot d1"></i>Ingredientes <b>45%</b><small>R$ 2.803,50</small></p><p><i class="dot d2"></i>Embalagens <b>25%</b><small>R$ 1.557,50</small></p><p><i class="dot d3"></i>Marketing <b>15%</b><small>R$ 934,50</small></p><p><i class="dot d4"></i>Outros <b>15%</b><small>R$ 934,50</small></p></div></div></article>
+        <article class="card best"><div class="card-title"><h3>Produtos mais vendidos</h3><button>•••</button></div><div class="product"><b>1</b><span class="product-icon">🍫</span><span>Brigadeiro Gourmet</span><small>560 un.</small><strong>R$ 5.600,00</strong></div><div class="product"><b>2</b><span class="product-icon">🍮</span><span>Copo da Felicidade</span><small>320 un.</small><strong>R$ 3.840,00</strong></div><div class="product"><b>3</b><span class="product-icon">🍰</span><span>Brownie Recheado</span><small>210 un.</small><strong>R$ 2.520,00</strong></div></article>
+      </aside>
+    </div>
+    <footer>Vinicinho Doces ERP &nbsp;•&nbsp; Gestão completa para o seu negócio <span>♥</span></footer>
+  </main>
+  <div class="toast" id="toast"></div>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script src="js/pages.js?v=editar-pre-venda-1"></script>
+  <script src="js/script.js?v=editar-usuario-1"></script>
+</body>
+</html>
