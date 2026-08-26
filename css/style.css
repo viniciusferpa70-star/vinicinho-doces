@@ -37,3 +37,6 @@ main{margin-left:266px}
 .profile>img{display:block;width:270px;height:132px;object-fit:cover;object-position:center;background:#351505}
 @media(max-width:1250px) and (min-width:851px){.sidebar{width:266px}.brand{width:200px;margin-left:auto;margin-right:auto}.profile>img{width:266px;object-position:center}main{margin-left:266px}}
 @media(max-width:850px){.profile>img{width:266px;object-position:center}}
+
+/* Mantém todas as telas acessíveis mesmo com novos módulos no menu */
+.sidebar nav{max-height:calc(100vh - 278px);overflow-y:auto;overflow-x:hidden;padding-right:4px;scrollbar-width:thin;scrollbar-color:#ffffff35 transparent}.sidebar nav::-webkit-scrollbar{width:5px}.sidebar nav::-webkit-scrollbar-thumb{background:#ffffff35;border-radius:10px}
