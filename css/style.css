@@ -33,7 +33,7 @@ main{margin-left:266px}
 /* Recortes oficiais do menu fornecidos pelo usuário */
 .brand{display:block;width:200px;height:87px;margin:-15px auto 30px;overflow:hidden}
 .brand>img{display:block;width:200px;height:87px;object-fit:cover;mix-blend-mode:normal}
-.profile{display:block;left:0;right:0;bottom:0;height:132px;padding:0;border:0;background:transparent}
+.profile{display:grid;left:26px;right:26px;bottom:23px;height:auto;padding-top:27px;border-top:1px solid #ffffff2e;background:transparent}
 .profile>img{display:block;width:270px;height:132px;object-fit:cover;object-position:center;background:#351505}
 @media(max-width:1250px) and (min-width:851px){.sidebar{width:266px}.brand{width:200px;margin-left:auto;margin-right:auto}.profile>img{width:266px;object-position:center}main{margin-left:266px}}
 @media(max-width:850px){.profile>img{width:266px;object-position:center}}
