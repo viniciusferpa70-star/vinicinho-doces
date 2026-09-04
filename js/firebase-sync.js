@@ -79,5 +79,10 @@
     }, 350);
   }
 
-  window.VinicinhoCloud = {initialize, save};
+  async function saveNow(payload) {
+    clearTimeout(saveTimer);
+    await dataRef.set({payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), owner: ALLOWED_EMAIL});
+  }
+
+  window.VinicinhoCloud = {initialize, save, saveNow};
 })();
