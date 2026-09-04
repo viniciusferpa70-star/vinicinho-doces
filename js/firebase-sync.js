@@ -1,4 +1,10 @@
 (function () {
+  if (location.hostname === 'viniciusferpa70-star.github.io') {
+    const path = location.pathname.replace(/^\/vinicinho-doces\/?/, '/');
+    location.replace(`https://vinicinho-doces-vf70.web.app${path}${location.search}${location.hash}`);
+    return;
+  }
+
   const ALLOWED_EMAIL = 'viniciusferpa70@gmail.com';
   const firebaseConfig = {
     apiKey: 'AIzaSyBY35RmjCQcfGc0Kj3LZll5J2jHaHooW24',
