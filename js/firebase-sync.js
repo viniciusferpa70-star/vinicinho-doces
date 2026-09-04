@@ -27,10 +27,10 @@
         button.disabled = true;
         screen.querySelector('small').textContent = 'Abrindo o Google…';
         try {
-          await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider().setCustomParameters({login_hint: ALLOWED_EMAIL}));
+          await auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider().setCustomParameters({login_hint: ALLOWED_EMAIL}));
         } catch (error) {
           button.disabled = false;
-          screen.querySelector('small').textContent = error.code === 'auth/popup-blocked' ? 'Permita pop-ups e tente novamente.' : 'Não foi possível entrar. Tente novamente.';
+          screen.querySelector('small').textContent = 'Não foi possível entrar. Tente novamente.';
         }
       };
     }
