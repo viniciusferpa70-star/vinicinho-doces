@@ -27,10 +27,15 @@
         button.disabled = true;
         screen.querySelector('small').textContent = 'Abrindo o Google…';
         try {
-          await auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider().setCustomParameters({login_hint: ALLOWED_EMAIL}));
+          await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider().setCustomParameters({login_hint: ALLOWED_EMAIL}));
         } catch (error) {
           button.disabled = false;
-          screen.querySelector('small').textContent = 'Não foi possível entrar. Tente novamente.';
+          const messages = {
+            'auth/popup-blocked': 'O Chrome bloqueou a janela do Google. Permita pop-ups para este site e tente novamente.',
+            'auth/popup-closed-by-user': 'A janela de login foi fechada antes da conclusão.',
+            'auth/unauthorized-domain': 'Este endereço ainda não está autorizado no Firebase.'
+          };
+          screen.querySelector('small').textContent = messages[error.code] || `Não foi possível entrar (${error.code || 'erro desconhecido'}).`;
         }
       };
     }
