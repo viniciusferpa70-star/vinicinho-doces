@@ -60,7 +60,7 @@
   async function initialize(localData) {
     await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
     await waitForAuthorizedUser();
-    const snapshot = await dataRef.get();
+    const snapshot = await dataRef.get({source: 'server'});
     if (snapshot.exists && snapshot.data()?.payload) return snapshot.data().payload;
     await dataRef.set({payload: localData, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), owner: ALLOWED_EMAIL});
     return localData;
