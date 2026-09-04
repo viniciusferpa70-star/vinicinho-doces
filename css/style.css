@@ -40,3 +40,11 @@ main{margin-left:266px}
 
 /* Mantém todas as telas acessíveis mesmo com novos módulos no menu */
 .sidebar nav{max-height:calc(100vh - 278px);overflow-y:auto;overflow-x:hidden;padding-right:4px;scrollbar-width:thin;scrollbar-color:#ffffff35 transparent}.sidebar nav::-webkit-scrollbar{width:5px}.sidebar nav::-webkit-scrollbar-thumb{background:#ffffff35;border-radius:10px}
+#firebaseLoginScreen{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;padding:24px;background:linear-gradient(135deg,#fff8ee,#f8e4c8)}
+#firebaseLoginScreen section{width:min(420px,100%);padding:38px;text-align:center;background:#fff;border-radius:28px;box-shadow:0 24px 70px #643d1826}
+#firebaseLoginScreen img{width:150px;max-height:120px;object-fit:contain}
+#firebaseLoginScreen h1{margin:12px 0 8px;color:#643d18}
+#firebaseLoginScreen p{margin:0 0 24px;color:#705f52;line-height:1.5}
+#firebaseLoginScreen button{border:0;border-radius:14px;padding:14px 22px;background:#643d18;color:#fff;font:600 15px 'DM Sans',sans-serif;cursor:pointer}
+#firebaseLoginScreen button:disabled{opacity:.65;cursor:wait}
+#firebaseLoginScreen small{display:block;min-height:20px;margin-top:14px;color:#b44732}

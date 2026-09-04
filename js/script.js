@@ -1,11 +1,20 @@
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   if (window.lucide) lucide.createIcons();
   const main = document.querySelector('main');
   const dashboardHTML = main.innerHTML;
   const sidebar = document.getElementById('sidebar');
   const toast = document.getElementById('toast');
   const STORAGE_KEY = 'vinicinho-doces-dados-limpos-v2';
-  const savedData = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{"vendas":[],"produtos":[],"despesas":[],"pagamentos":[],"clientes":[],"fornecedores":[]}');
+  const localData = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{"vendas":[],"produtos":[],"despesas":[],"pagamentos":[],"clientes":[],"fornecedores":[]}');
+  let savedData = localData;
+  try {
+    savedData = await window.VinicinhoCloud.initialize(localData);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(savedData));
+  } catch (error) {
+    console.error('Não foi possível carregar os dados do Firebase:', error);
+    alert('Não foi possível carregar seus dados online. Verifique a conexão e recarregue a página.');
+    return;
+  }
   savedData.usuarios ||= [{id:'user-vinicinho',nome:'Vinicinho',cargo:'Administrador',avatar:'cartoon'}];
   savedData.usuarioAtual ||= savedData.usuarios[0].id;
   savedData.metaDiaria = +savedData.metaDiaria || 100;
@@ -118,6 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
     savedData.pagamentos.forEach(record=>record.caixaId||=savedData.vendas.find(sale=>sale.id===record.saleId)?.caixaId||accountId);
     savedData.pagamentosDespesas.forEach(record=>record.caixaId||=savedData.despesas.find(expense=>expense.id===record.expenseId)?.caixaId||accountId);
     localStorage.setItem(STORAGE_KEY,JSON.stringify(savedData));
+    window.VinicinhoCloud.save(savedData);
   }
   function money(value){return Number(value).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
   function today(){return new Date().toLocaleDateString('pt-BR')}
