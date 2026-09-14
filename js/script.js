@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
   savedData.pagamentosDespesas.forEach(record=>record.caixaId||=savedData.despesas.find(expense=>expense.id===record.expenseId)?.caixaId||legacyCashId);
   savedData.caixa.forEach(movement=>movement.caixaId||='caixa-principal');
   savedData.producoes ||= [];
+  savedData.cardapios ||= [];
   savedData.backupAutomatico ||= {ativo:false,intervaloMinutos:60,ultimoBackup:null,pasta:'C:\\Users\\Vinicius\\Desktop\\Sistema Doces\\Backups'};
   if(false&&!savedData.clientes.length) savedData.clientes.push(
     {nome:'Guilherme',documento:'',telefone:'(17) 99999-1234',email:'cliente@email.com',endereco:'Rua, número e bairro',cidade:'São José do Rio Preto / SP',observacoes:'Preferências, endereço de entrega e informações úteis...',ativo:true,saldo:5},
@@ -79,6 +80,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('notifyButton').addEventListener('click', () => showToast('Você tem 3 novas notificações'));
   document.getElementById('settingsButton').addEventListener('click', () => showToast('Configurações do painel'));
   function bindPageActions(){
+    if(main.querySelector('.page-head h1')?.textContent==='Produtos e receitas'&&!main.querySelector('[data-action="Criar cardápio"]')){
+      const actions=main.querySelector('.page-head');
+      const button=document.createElement('button');button.className='outline-btn menu-editor-launch';button.dataset.action='Criar cardápio';button.textContent='▤ Criar cardápio';actions.appendChild(button);
+    }
     window.vinicinhoSavedPoints=savedData.pontos.filter(point=>point.ativo).map(point=>point.nome);
     main.querySelectorAll('[data-action]').forEach(button=>button.addEventListener('click',()=>handleAction(button.dataset.action,button)));
     main.querySelectorAll('[data-report]').forEach(button=>button.addEventListener('click',()=>{main.innerHTML=reportPage(button.dataset.report);bindPageActions()}));
@@ -154,6 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const form=wrap.querySelector('form');form.addEventListener('submit',e=>e.preventDefault());wrap.querySelector('.modal-save').onclick=()=>{if(!form.reportValidity())return;const values=Object.fromEntries(new FormData(form));try{onSubmit(values);persist();close();refreshCurrentView();showToast('Registro salvo com sucesso')}catch(err){const box=wrap.querySelector('.form-error');box.textContent=err.message;box.classList.remove('hidden')}};
   }
   function handleAction(action,button){
+    if(action==='Criar cardápio') return window.VinicinhoMenuEditor.open({data:savedData.cardapios,products:savedData.produtos,save:cardapios=>{savedData.cardapios=cardapios;persist()}});
     if(action==='Nova venda') return openSaleModal();
     if(action==='Novo serviço') return openServiceModal();
     if(action==='Nova pré-venda') return openPreSaleModal();
