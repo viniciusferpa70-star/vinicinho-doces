@@ -84,6 +84,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const actions=main.querySelector('.page-head');
       const button=document.createElement('button');button.className='outline-btn menu-editor-launch';button.dataset.action='Criar cardápio';button.textContent='▤ Criar cardápio';actions.appendChild(button);
     }
+    if(main.querySelector('.page-head h1')?.textContent==='Despesas'&&!main.querySelector('[data-action="Importar XML"]')){
+      const button=document.createElement('button');button.className='outline-btn xml-import-launch';button.dataset.action='Importar XML';button.textContent='⇧ Importar XML / NFC-e';main.querySelector('.page-head').appendChild(button);
+    }
     window.vinicinhoSavedPoints=savedData.pontos.filter(point=>point.ativo).map(point=>point.nome);
     main.querySelectorAll('[data-action]').forEach(button=>button.addEventListener('click',()=>handleAction(button.dataset.action,button)));
     main.querySelectorAll('[data-report]').forEach(button=>button.addEventListener('click',()=>{main.innerHTML=reportPage(button.dataset.report);bindPageActions()}));
@@ -160,6 +163,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function handleAction(action,button){
     if(action==='Criar cardápio') return window.VinicinhoMenuEditor.open({data:savedData.cardapios,products:savedData.produtos,save:cardapios=>{savedData.cardapios=cardapios;persist()}});
+    if(action==='Importar XML') return window.VinicinhoXmlImporter.open({products:savedData.produtos,suppliers:savedData.fornecedores,expenses:savedData.despesas,commit:purchase=>{
+      if(savedData.despesas.some(item=>item.chaveNfce&&item.chaveNfce===purchase.chave))throw Error('Esta nota já foi importada.');
+      let supplier=savedData.fornecedores.find(item=>(item.documento||'').replace(/\D/g,'')===purchase.fornecedor.cnpj)||savedData.fornecedores.find(item=>item.nome.toLowerCase()===purchase.fornecedor.nome.toLowerCase());
+      if(!supplier){supplier={nome:purchase.fornecedor.nome,documento:purchase.fornecedor.cnpj,contato:'',telefone:'',email:'',categoria:'Ingredientes',endereco:purchase.fornecedor.endereco||'',prazo:'',produtos:'Importado por XML',ativo:true};savedData.fornecedores.push(supplier)}
+      const itens=purchase.itens.map(item=>{let product=item.productName?savedData.produtos.find(entry=>entry.nome===item.productName):null;if(!product){product={nome:item.newName.trim()||item.descricao,tipo:item.tipo||'Pronto',emoji:'📦',preco:+item.preco||0,custo:+item.custo||0,estoque:0,unidade:item.unidade||'UN',codigoFornecedor:item.codigo,descricao:`Importado da NFC-e ${purchase.numero}`,ingredientes:[],combos:[]};savedData.produtos.push(product)}else{product.codigoFornecedor||=item.codigo;product.unidade||=item.unidade}return {produto:product.nome,quantidade:+item.quantidade||0,custo:+item.custo||0,codigo:item.codigo,unidade:item.unidade,subtotal:+item.total||0}});
+      const expense={id:`despesa-xml-${Date.now()}`,caixaId:savedData.caixaAtual,data:purchase.data,fornecedor:supplier.nome,categoria:'Ingredientes',itens,valor:+purchase.total||itens.reduce((sum,item)=>sum+item.subtotal,0),situacao:purchase.situacao,formaPagamento:purchase.formaPagamento,vencimento:purchase.vencimento||'',observacao:`Importada do XML • NFC-e ${purchase.numero} série ${purchase.serie}${purchase.naoFiscal?' • arquivo reconstruído da consulta pública':''}`,origem:'Importação XML/NFC-e',chaveNfce:purchase.chave,numeroNfce:purchase.numero,serieNfce:purchase.serie};savedData.despesas.push(expense);increaseStockFromExpense(expense);selectedExpense=savedData.despesas.length-1;persist();refreshCurrentView();showToast(`NFC-e ${purchase.numero} importada com sucesso`)
+    }});
     if(action==='Nova venda') return openSaleModal();
     if(action==='Novo serviço') return openServiceModal();
     if(action==='Nova pré-venda') return openPreSaleModal();
