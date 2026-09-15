@@ -19,7 +19,14 @@
   const auth = firebase.auth();
   const db = firebase.firestore();
   const dataRef = db.collection('businesses').doc('vinicinho-doces');
+  const STORAGE_KEY = 'vinicinho-doces-dados-limpos-v2';
   let saveTimer = null;
+  let lastPayload = null;
+
+  function recordCount(data) {
+    return ['vendas','produtos','despesas','clientes','fornecedores','preVendas','servicos','producoes','caixa']
+      .reduce((total, key) => total + (Array.isArray(data?.[key]) ? data[key].length : 0), 0);
+  }
 
   function loginScreen(message = '') {
     let screen = document.getElementById('firebaseLoginScreen');
@@ -72,16 +79,24 @@
     await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
     await waitForAuthorizedUser();
     const snapshot = await dataRef.get({source: 'server'});
-    if (snapshot.exists && snapshot.data()?.payload) return snapshot.data().payload;
+    if (snapshot.exists && snapshot.data()?.payload) {
+      const cloudData = snapshot.data().payload;
+      if (recordCount(localData) > recordCount(cloudData)) {
+        await dataRef.set({payload: localData, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), owner: ALLOWED_EMAIL});
+        return localData;
+      }
+      return cloudData;
+    }
     await dataRef.set({payload: localData, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), owner: ALLOWED_EMAIL});
     return localData;
   }
 
   function save(payload) {
+    lastPayload = JSON.parse(JSON.stringify(payload));
     clearTimeout(saveTimer);
     saveTimer = setTimeout(async () => {
       try {
-        await dataRef.set({payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), owner: ALLOWED_EMAIL});
+        await dataRef.set({payload: lastPayload, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), owner: ALLOWED_EMAIL});
         window.dispatchEvent(new CustomEvent('vinicinho-cloud-saved'));
       } catch (error) {
         console.error('Falha ao sincronizar com o Firebase:', error);
@@ -92,8 +107,20 @@
 
   async function saveNow(payload) {
     clearTimeout(saveTimer);
-    await dataRef.set({payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), owner: ALLOWED_EMAIL});
+    lastPayload = JSON.parse(JSON.stringify(payload));
+    await dataRef.set({payload: lastPayload, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), owner: ALLOWED_EMAIL});
   }
 
-  window.VinicinhoCloud = {initialize, save, saveNow};
+  const localData = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{"vendas":[],"produtos":[],"despesas":[],"pagamentos":[],"clientes":[],"fornecedores":[]}');
+  const ready = initialize(localData).then(data => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    window.dispatchEvent(new CustomEvent('vinicinho-cloud-ready'));
+    return data;
+  }).catch(error => {
+    console.error('Não foi possível carregar os dados do Firebase:', error);
+    loginScreen(`Não foi possível carregar os dados da nuvem (${error.code || error.message || 'erro desconhecido'}).`);
+    throw error;
+  });
+
+  window.VinicinhoCloud = {ready, initialize, save, saveNow};
 })();
