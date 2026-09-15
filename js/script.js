@@ -25,6 +25,26 @@ document.addEventListener('DOMContentLoaded', () => {
   savedData.caixa.forEach(movement=>movement.caixaId||='caixa-principal');
   savedData.producoes ||= [];
   savedData.cardapios ||= [];
+  const MODULE_PARAMETERS=[
+    {key:'dashboard',page:'Dashboard',label:'Tela inicial (Dashboard)',description:'Resumo geral, indicadores e atalhos do negócio.'},
+    {key:'vendas',page:'Vendas',label:'Tela de vendas',description:'Vendas, pré-vendas e baixa de estoque.'},
+    {key:'contasReceber',page:'Contas a Receber',label:'Contas a receber',description:'Valores pendentes e recebimentos de clientes.'},
+    {key:'despesas',page:'Despesas',label:'Tela de despesas',description:'Compras, gastos e lançamentos de fornecedores.'},
+    {key:'contasPagar',page:'Contas a Pagar',label:'Contas a pagar',description:'Vencimentos e pagamentos de despesas.'},
+    {key:'caixa',page:'Caixa',label:'Tela de caixa',description:'Entradas, saídas, saldos e transferências.'},
+    {key:'servicos',page:'Serviços',label:'Tela de serviços',description:'Serviços prestados e produtos utilizados.'},
+    {key:'produtos',page:'Produtos',label:'Tela de produtos e receitas',description:'Produtos, ingredientes, receitas e estoque.'},
+    {key:'producao',page:'Produção',label:'Controle de produção',description:'Lotes produzidos e consumo de ingredientes.'},
+    {key:'clientes',page:'Clientes',label:'Cadastro de clientes',description:'Contatos e histórico dos clientes.'},
+    {key:'fornecedores',page:'Fornecedores',label:'Cadastro de fornecedores',description:'Fornecedores, contatos e condições de compra.'},
+    {key:'pontosVenda',page:'Pontos de Venda',label:'Pontos de venda',description:'Lojas, canais e locais de comercialização.'},
+    {key:'relatorios',page:'Relatórios',label:'Tela de relatórios',description:'Relatórios financeiros, vendas e estoque.'},
+    {key:'importarXml',feature:'xml',label:'Importar XML / NFC-e',description:'Importação de compras e identificação de produtos.'},
+    {key:'cardapios',feature:'cardapios',label:'Criar e editar cardápios',description:'Editor de frente, verso e exportação para PDF.'},
+    {key:'assistenteIa',feature:'ia',label:'Assistente IA',description:'Consultas e ações assistidas dentro do sistema.'}
+  ];
+  const defaultParameters=Object.fromEntries(MODULE_PARAMETERS.map(item=>[item.key,true]));
+  savedData.parametros={...defaultParameters,...(savedData.parametros||{})};
   savedData.backupAutomatico ||= {ativo:false,intervaloMinutos:60,ultimoBackup:null,pasta:'C:\\Users\\Vinicius\\Desktop\\Sistema Doces\\Backups'};
   if(false&&!savedData.clientes.length) savedData.clientes.push(
     {nome:'Guilherme',documento:'',telefone:'(17) 99999-1234',email:'cliente@email.com',endereco:'Rua, número e bairro',cidade:'São José do Rio Preto / SP',observacoes:'Preferências, endereço de entrega e informações úteis...',ativo:true,saldo:5},
@@ -67,24 +87,37 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   document.getElementById('menuToggle').addEventListener('click', () => sidebar.classList.add('open'));
   document.getElementById('mobileClose').addEventListener('click', () => sidebar.classList.remove('open'));
-  document.querySelectorAll('.nav-item').forEach(item => item.addEventListener('click', () => {
-    document.querySelectorAll('.nav-item').forEach(button => button.classList.remove('active'));
-    item.classList.add('active');
+  function parameterEnabled(key){return savedData.parametros[key]!==false}
+  function pageEnabled(page){const parameter=MODULE_PARAMETERS.find(item=>item.page===page);return !parameter||parameterEnabled(parameter.key)}
+  function firstEnabledPage(){return MODULE_PARAMETERS.find(item=>item.page&&pageEnabled(item.page))?.page||'Dashboard'}
+  function openPage(page){
+    if(!pageEnabled(page)){showToast('Esta tela está desativada nos parâmetros.');return false}
+    document.querySelectorAll('.nav-item').forEach(button=>button.classList.toggle('active',button.dataset.page===page));
+    main.innerHTML=page==='Dashboard'?dashboardHTML:pages[page];
     sidebar.classList.remove('open');
-    if (item.dataset.page === 'Dashboard') main.innerHTML = dashboardHTML;
-    else if (pages[item.dataset.page]) main.innerHTML = pages[item.dataset.page];
     bindPageActions();
+    applyModuleParameters();
+    return true;
+  }
+  function applyModuleParameters(){
+    document.querySelectorAll('.nav-item').forEach(item=>item.classList.toggle('module-disabled',!pageEnabled(item.dataset.page)));
+    const aiButton=document.getElementById('aiAssistantButton');if(aiButton)aiButton.classList.toggle('module-disabled',!parameterEnabled('assistenteIa'));
+    const active=document.querySelector('.nav-item.active');
+    if(active&&!pageEnabled(active.dataset.page))openPage(firstEnabledPage());
+  }
+  document.querySelectorAll('.nav-item').forEach(item => item.addEventListener('click', () => {
+    if(item.hasAttribute('data-settings')){sidebar.classList.remove('open');return openSettings()}
+    openPage(item.dataset.page);
   }));
   document.getElementById('summaryButton').addEventListener('click', () => showToast('Hoje: 8 pedidos e R$ 1.840,00 em vendas'));
   document.getElementById('dateButton').addEventListener('click', () => showToast('Período selecionado: maio de 2024'));
   document.getElementById('notifyButton').addEventListener('click', () => showToast('Você tem 3 novas notificações'));
-  document.getElementById('settingsButton').addEventListener('click', () => showToast('Configurações do painel'));
   function bindPageActions(){
-    if(main.querySelector('.page-head h1')?.textContent==='Produtos e receitas'&&!main.querySelector('[data-action="Criar cardápio"]')){
+    if(parameterEnabled('cardapios')&&main.querySelector('.page-head h1')?.textContent==='Produtos e receitas'&&!main.querySelector('[data-action="Criar cardápio"]')){
       const actions=main.querySelector('.page-head');
       const button=document.createElement('button');button.className='outline-btn menu-editor-launch';button.dataset.action='Criar cardápio';button.textContent='▤ Criar cardápio';actions.appendChild(button);
     }
-    if(main.querySelector('.page-head h1')?.textContent==='Despesas'&&!main.querySelector('[data-action="Importar XML"]')){
+    if(parameterEnabled('importarXml')&&main.querySelector('.page-head h1')?.textContent==='Despesas'&&!main.querySelector('[data-action="Importar XML"]')){
       const button=document.createElement('button');button.className='outline-btn xml-import-launch';button.dataset.action='Importar XML';button.textContent='⇧ Importar XML / NFC-e';main.querySelector('.page-head').appendChild(button);
     }
     window.vinicinhoSavedPoints=savedData.pontos.filter(point=>point.ativo).map(point=>point.nome);
@@ -105,7 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updatePeriodLabel();
     if(window.lucide) lucide.createIcons();
   }
-  window.openPage = name => { if(pages[name]){main.innerHTML=pages[name];bindPageActions()} };
+  window.openPage = name => { if(name==='Dashboard'||pages[name])openPage(name) };
   const hashRoutes = {clientes:'Clientes',fornecedores:'Fornecedores'};
   function openHashRoute(){const route=hashRoutes[location.hash.slice(1).toLowerCase()];if(route)window.openPage(route)}
   window.addEventListener('hashchange',openHashRoute);
@@ -113,6 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('userSwitch').addEventListener('click',openUserSwitch);
   bindPageActions();
   applyCurrentUser();
+  applyModuleParameters();
   updatePeriodLabel();
   openHashRoute();
   startAutomaticBackupMonitor();
@@ -162,14 +196,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const form=wrap.querySelector('form');form.addEventListener('submit',e=>e.preventDefault());wrap.querySelector('.modal-save').onclick=()=>{if(!form.reportValidity())return;const values=Object.fromEntries(new FormData(form));try{onSubmit(values);persist();close();refreshCurrentView();showToast('Registro salvo com sucesso')}catch(err){const box=wrap.querySelector('.form-error');box.textContent=err.message;box.classList.remove('hidden')}};
   }
   function handleAction(action,button){
-    if(action==='Criar cardápio') return window.VinicinhoMenuEditor.open({data:savedData.cardapios,products:savedData.produtos,save:cardapios=>{savedData.cardapios=cardapios;persist()}});
-    if(action==='Importar XML') return window.VinicinhoXmlImporter.open({products:savedData.produtos,suppliers:savedData.fornecedores,expenses:savedData.despesas,commit:purchase=>{
+    if(action==='Criar cardápio'){if(!parameterEnabled('cardapios'))return showToast('A criação de cardápios está desativada nos parâmetros.');return window.VinicinhoMenuEditor.open({data:savedData.cardapios,products:savedData.produtos,save:cardapios=>{savedData.cardapios=cardapios;persist()}})}
+    if(action==='Importar XML'){if(!parameterEnabled('importarXml'))return showToast('A importação XML está desativada nos parâmetros.');return window.VinicinhoXmlImporter.open({products:savedData.produtos,suppliers:savedData.fornecedores,expenses:savedData.despesas,commit:purchase=>{
       if(savedData.despesas.some(item=>item.chaveNfce&&item.chaveNfce===purchase.chave))throw Error('Esta nota já foi importada.');
       let supplier=savedData.fornecedores.find(item=>(item.documento||'').replace(/\D/g,'')===purchase.fornecedor.cnpj)||savedData.fornecedores.find(item=>item.nome.toLowerCase()===purchase.fornecedor.nome.toLowerCase());
       if(!supplier){supplier={nome:purchase.fornecedor.nome,documento:purchase.fornecedor.cnpj,contato:'',telefone:'',email:'',categoria:'Ingredientes',endereco:purchase.fornecedor.endereco||'',prazo:'',produtos:'Importado por XML',ativo:true};savedData.fornecedores.push(supplier)}
       const itens=purchase.itens.map(item=>{let product=item.productName?savedData.produtos.find(entry=>entry.nome===item.productName):null;if(!product){product={nome:item.newName.trim()||item.descricao,tipo:item.tipo||'Pronto',emoji:'📦',preco:+item.preco||0,custo:+item.custo||0,estoque:0,unidade:item.unidade||'UN',codigoFornecedor:item.codigo,descricao:`Importado da NFC-e ${purchase.numero}`,ingredientes:[],combos:[]};savedData.produtos.push(product)}else{product.codigoFornecedor||=item.codigo;product.unidade||=item.unidade}return {produto:product.nome,quantidade:+item.quantidade||0,custo:+item.custo||0,codigo:item.codigo,unidade:item.unidade,subtotal:+item.total||0}});
       const expense={id:`despesa-xml-${Date.now()}`,caixaId:savedData.caixaAtual,data:purchase.data,fornecedor:supplier.nome,categoria:'Ingredientes',itens,valor:+purchase.total||itens.reduce((sum,item)=>sum+item.subtotal,0),situacao:purchase.situacao,formaPagamento:purchase.formaPagamento,vencimento:purchase.vencimento||'',observacao:`Importada do XML • NFC-e ${purchase.numero} série ${purchase.serie}${purchase.naoFiscal?' • arquivo reconstruído da consulta pública':''}`,origem:'Importação XML/NFC-e',chaveNfce:purchase.chave,numeroNfce:purchase.numero,serieNfce:purchase.serie};savedData.despesas.push(expense);increaseStockFromExpense(expense);selectedExpense=savedData.despesas.length-1;persist();refreshCurrentView();showToast(`NFC-e ${purchase.numero} importada com sucesso`)
-    }});
+    }})}
     if(action==='Nova venda') return openSaleModal();
     if(action==='Novo serviço') return openServiceModal();
     if(action==='Nova pré-venda') return openPreSaleModal();
@@ -386,7 +420,26 @@ document.addEventListener('DOMContentLoaded', () => {
   function avatarDisplay(user){return isImageAvatar(user.avatar)?`<img src="${user.avatar}" alt="Avatar de ${user.nome}">`:(user.avatar==='cartoon'?'👤':user.avatar)}
   function applyCurrentUser(){const user=currentUser(),profile=document.getElementById('userSwitch');if(profile){const avatar=profile.querySelector('.user-avatar');avatar.className=`user-avatar ${user.avatar==='cartoon'?'cartoon-avatar':''} ${isImageAvatar(user.avatar)?'uploaded-avatar':''}`;avatar.style.backgroundImage=isImageAvatar(user.avatar)?`url("${user.avatar}")`:'';avatar.textContent=user.avatar==='cartoon'||isImageAvatar(user.avatar)?'':user.avatar;profile.querySelector('strong').textContent=user.nome;profile.querySelector('small').textContent=user.cargo||'Usuário'}const hero=main.querySelector('.hero h2');if(hero)hero.innerHTML=`Bem-vindo,<br>${user.nome}! <span>♥</span>`}
   function openUserSwitch(){const options=savedData.usuarios.map(u=>`<option value="${u.id}" ${u.id===savedData.usuarioAtual?'selected':''}>${isImageAvatar(u.avatar)?'📷':u.avatar==='cartoon'?'👤':u.avatar} ${u.nome} — ${u.cargo}</option>`).join('');openModal('Trocar usuário',`<div class="modal-field wide"><label>Usuário ativo</label><select name="usuarioId">${options}</select></div>`,values=>{savedData.usuarioAtual=values.usuarioId;applyCurrentUser()})}
-  function openSettings(){let uploadedAvatar='';const userRows=savedData.usuarios.map(u=>`<div class="settings-user"><span>${avatarDisplay(u)}</span><b>${u.nome}</b><small>${u.cargo}</small></div>`).join('');openModal('Configurações e usuários',fieldHTML('Meta de vendas do dia','meta','number',savedData.metaDiaria)+`<div class="backup-settings wide"><div><h3>Backup completo</h3><p>Exporte todos os cadastros e movimentações para importar em outro navegador ou computador.</p><small>Último backup: <b>${savedData.ultimoBackup?new Date(savedData.ultimoBackup).toLocaleString('pt-BR'):'nenhum backup exportado'}</b></small></div><div class="backup-actions"><button type="button" class="backup-export">Baixar backup</button><button type="button" class="backup-import">Importar backup</button><input class="backup-file" type="file" accept="application/json,.json" hidden></div></div><div class="settings-users"><h3>Usuários cadastrados</h3>${userRows}</div><div class="modal-field wide"><h3>Cadastrar novo usuário</h3></div>`+optionalFieldHTML('Nome do usuário','novoNome')+optionalFieldHTML('Cargo','novoCargo')+`<div class="modal-field"><label>Avatar padrão</label><select name="novoAvatar"><option>👨🏽‍🍳</option><option>👩🏽‍🍳</option><option>👨🏽</option><option>👩🏽</option><option>🧑🏽</option><option>🧁</option><option>🍫</option><option>🍭</option></select></div><div class="modal-field avatar-upload-field"><label>Ou importar uma imagem</label><input class="avatar-file" type="file" accept="image/png,image/jpeg,image/webp"><div class="avatar-preview"><span>Prévia</span></div><small class="avatar-upload-status">PNG, JPG ou WebP</small></div>`,values=>{const goal=+values.meta;if(goal<=0)throw Error('Informe uma meta diária válida.');savedData.metaDiaria=goal;if(values.novoNome?.trim())savedData.usuarios.push({id:`user-${Date.now()}`,nome:values.novoNome.trim(),cargo:values.novoCargo?.trim()||'Usuário',avatar:uploadedAvatar||values.novoAvatar});hydrateDashboard();updateNotificationBadge()});const modal=document.querySelector('.modal-backdrop'),fileInput=modal.querySelector('.backup-file'),avatarInput=modal.querySelector('.avatar-file'),preview=modal.querySelector('.avatar-preview'),status=modal.querySelector('.avatar-upload-status');modal.querySelector('.backup-export').onclick=()=>downloadBackup();modal.querySelector('.backup-import').onclick=()=>fileInput.click();fileInput.onchange=()=>{const file=fileInput.files[0];if(file)importBackupFile(file)};avatarInput.onchange=async()=>{const file=avatarInput.files[0];if(!file)return;status.textContent='Processando imagem...';try{uploadedAvatar=await resizeAvatarImage(file);preview.innerHTML=`<img src="${uploadedAvatar}" alt="Prévia do avatar">`;status.textContent='Imagem pronta para salvar'}catch(error){uploadedAvatar='';status.textContent=error.message;avatarInput.value=''}}}
+  function parameterCards(){return MODULE_PARAMETERS.map(item=>`<label class="parameter-card"><span class="parameter-copy"><b>${item.label}</b><small>${item.description}</small></span><span class="parameter-switch"><input type="checkbox" name="param_${item.key}" ${parameterEnabled(item.key)?'checked':''}><i></i></span></label>`).join('')}
+  function openSettings(){
+    let uploadedAvatar='';
+    const userRows=savedData.usuarios.map(u=>`<div class="settings-user"><span>${avatarDisplay(u)}</span><b>${u.nome}</b><small>${u.cargo}</small></div>`).join('');
+    const content=`<div class="settings-tabs wide"><button type="button" class="active" data-settings-tab="geral">Geral e backup</button><button type="button" data-settings-tab="parametros">Parâmetros</button><button type="button" data-settings-tab="usuarios">Usuários</button></div>
+      <section class="settings-panel wide active" data-settings-panel="geral">${fieldHTML('Meta de vendas do dia','meta','number',savedData.metaDiaria)}<div class="backup-settings wide"><div><h3>Backup completo</h3><p>Exporte todos os cadastros e movimentações para importar em outro navegador ou computador.</p><small>Último backup: <b>${savedData.ultimoBackup?new Date(savedData.ultimoBackup).toLocaleString('pt-BR'):'nenhum backup exportado'}</b></small></div><div class="backup-actions"><button type="button" class="backup-export">Baixar backup</button><button type="button" class="backup-import">Importar backup</button><input class="backup-file" type="file" accept="application/json,.json" hidden></div></div></section>
+      <section class="settings-panel wide" data-settings-panel="parametros"><div class="parameters-head"><div><h3>Recursos do sistema</h3><p>Ative somente as telas e funções que deseja usar. Configurações continuará sempre disponível.</p></div><button type="button" class="parameters-enable-all">Ativar tudo</button></div><div class="parameters-grid">${parameterCards()}</div></section>
+      <section class="settings-panel wide" data-settings-panel="usuarios"><div class="settings-users"><h3>Usuários cadastrados</h3>${userRows}</div><div class="modal-field wide"><h3>Cadastrar novo usuário</h3></div><div class="settings-user-fields">${optionalFieldHTML('Nome do usuário','novoNome')}${optionalFieldHTML('Cargo','novoCargo')}<div class="modal-field"><label>Avatar padrão</label><select name="novoAvatar"><option>👨🏽‍🍳</option><option>👩🏽‍🍳</option><option>👨🏽</option><option>👩🏽</option><option>🧑🏽</option><option>🧁</option><option>🍫</option><option>🍭</option></select></div><div class="modal-field avatar-upload-field"><label>Ou importar uma imagem</label><input class="avatar-file" type="file" accept="image/png,image/jpeg,image/webp"><div class="avatar-preview"><span>Prévia</span></div><small class="avatar-upload-status">PNG, JPG ou WebP</small></div></div></section>`;
+    openModal('Configurações e usuários',content,values=>{
+      const goal=+values.meta;if(goal<=0)throw Error('Informe uma meta diária válida.');savedData.metaDiaria=goal;
+      MODULE_PARAMETERS.forEach(item=>savedData.parametros[item.key]=values[`param_${item.key}`]==='on');
+      if(values.novoNome?.trim())savedData.usuarios.push({id:`user-${Date.now()}`,nome:values.novoNome.trim(),cargo:values.novoCargo?.trim()||'Usuário',avatar:uploadedAvatar||values.novoAvatar});
+      applyModuleParameters();hydrateDashboard();updateNotificationBadge();
+    });
+    const modal=document.querySelector('.modal-backdrop'),fileInput=modal.querySelector('.backup-file'),avatarInput=modal.querySelector('.avatar-file'),preview=modal.querySelector('.avatar-preview'),status=modal.querySelector('.avatar-upload-status');
+    modal.querySelectorAll('[data-settings-tab]').forEach(tab=>tab.onclick=()=>{modal.querySelectorAll('[data-settings-tab]').forEach(item=>item.classList.toggle('active',item===tab));modal.querySelectorAll('[data-settings-panel]').forEach(panel=>panel.classList.toggle('active',panel.dataset.settingsPanel===tab.dataset.settingsTab))});
+    modal.querySelector('.parameters-enable-all').onclick=()=>modal.querySelectorAll('.parameter-switch input').forEach(input=>input.checked=true);
+    modal.querySelector('.backup-export').onclick=()=>downloadBackup();modal.querySelector('.backup-import').onclick=()=>fileInput.click();fileInput.onchange=()=>{const file=fileInput.files[0];if(file)importBackupFile(file)};
+    avatarInput.onchange=async()=>{const file=avatarInput.files[0];if(!file)return;status.textContent='Processando imagem...';try{uploadedAvatar=await resizeAvatarImage(file);preview.innerHTML=`<img src="${uploadedAvatar}" alt="Prévia do avatar">`;status.textContent='Imagem pronta para salvar'}catch(error){uploadedAvatar='';status.textContent=error.message;avatarInput.value=''}}
+  }
   function resizeAvatarImage(file){return new Promise((resolve,reject)=>{if(!file.type.startsWith('image/'))return reject(Error('Selecione um arquivo de imagem.'));if(file.size>10*1024*1024)return reject(Error('A imagem deve ter no máximo 10 MB.'));const reader=new FileReader();reader.onerror=()=>reject(Error('Não foi possível ler a imagem.'));reader.onload=()=>{const image=new Image();image.onerror=()=>reject(Error('Formato de imagem inválido.'));image.onload=()=>{const size=256,canvas=document.createElement('canvas'),ctx=canvas.getContext('2d'),scale=Math.max(size/image.width,size/image.height),width=image.width*scale,height=image.height*scale;canvas.width=size;canvas.height=size;ctx.drawImage(image,(size-width)/2,(size-height)/2,width,height);resolve(canvas.toDataURL('image/jpeg',.84))};image.src=reader.result};reader.readAsDataURL(file)})}
   function enhanceUserSettings(scope){scope.querySelectorAll('.settings-user').forEach((row,index)=>{if(row.querySelector('.edit-user-btn'))return;const button=document.createElement('button');button.type='button';button.className='edit-user-btn';button.textContent='Editar';button.onclick=()=>openEditUser(index);row.appendChild(button)});if(!scope.querySelector('.automatic-backup-settings')){const users=scope.querySelector('.settings-users');users?.insertAdjacentHTML('beforebegin',`<div class="automatic-backup-settings wide"><div><h3>Backup automático</h3><p>Salva uma cópia completa a cada 1 hora automaticamente.</p><small>Pasta definida: <b>C:\\Users\\Vinicius\\Desktop\\Sistema Doces\\Backups</b></small><small class="automatic-backup-status">${automaticBackupStatus()}</small></div><div class="automatic-backup-actions"><button type="button" class="backup-now">Fazer backup agora</button></div></div>`);scope.querySelector('.backup-now').onclick=()=>performAutomaticBackup(true)}}
   function openEditUser(index){const user=savedData.usuarios[index];if(!user)return showToast('Usuário não encontrado');let uploadedAvatar='';const currentPreview=isImageAvatar(user.avatar)?`<img src="${user.avatar}" alt="Avatar atual">`:`<span>${user.avatar==='cartoon'?'👤':user.avatar}</span>`;openModal(`Editar usuário — ${user.nome}`,fieldHTML('Nome do usuário','nome','text',user.nome)+optionalFieldHTML('Cargo','cargo','text',user.cargo||'')+`<div class="modal-field"><label>Alterar avatar</label><select name="avatar"><option value="__keep__">Manter avatar atual</option><option>👨🏽‍🍳</option><option>👩🏽‍🍳</option><option>👨🏽</option><option>👩🏽</option><option>🧑🏽</option><option>🧁</option><option>🍫</option><option>🍭</option></select></div><div class="modal-field avatar-upload-field"><label>Importar nova imagem</label><input class="edit-avatar-file" type="file" accept="image/png,image/jpeg,image/webp"><div class="avatar-preview edit-avatar-preview">${currentPreview}</div><small class="edit-avatar-status">PNG, JPG ou WebP — máximo 10 MB</small></div>`,values=>{if(!values.nome.trim())throw Error('O nome do usuário é obrigatório.');user.nome=values.nome.trim();user.cargo=values.cargo.trim()||'Usuário';if(uploadedAvatar)user.avatar=uploadedAvatar;else if(values.avatar!=='__keep__')user.avatar=values.avatar;applyCurrentUser()},);const modal=document.querySelector('.modal-backdrop'),input=modal.querySelector('.edit-avatar-file'),preview=modal.querySelector('.edit-avatar-preview'),status=modal.querySelector('.edit-avatar-status');input.onchange=async()=>{const file=input.files[0];if(!file)return;status.textContent='Processando imagem...';try{uploadedAvatar=await resizeAvatarImage(file);preview.innerHTML=`<img src="${uploadedAvatar}" alt="Prévia do novo avatar">`;status.textContent='Nova imagem pronta para salvar'}catch(error){uploadedAvatar='';status.textContent=error.message;input.value=''}}}
