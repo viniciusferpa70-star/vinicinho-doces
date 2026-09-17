@@ -2,4 +2,6 @@ backup_server.py
 __pycache__/
 *.log
 .firebase/
+output/
+tmp/
 

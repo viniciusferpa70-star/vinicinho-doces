@@ -4,6 +4,8 @@
     "ignore": [
       "firebase.json",
       "README.md",
+      "output/**",
+      "tmp/**",
       "**/.*",
       "**/node_modules/**"
     ],
