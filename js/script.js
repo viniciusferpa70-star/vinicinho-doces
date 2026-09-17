@@ -511,6 +511,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       const pageWidth=pdf.internal.pageSize.getWidth(),pageHeight=pdf.internal.pageSize.getHeight(),margin=5;
       const printableWidth=pageWidth-margin*2,printableHeight=pageHeight-margin*2;
       const pixelsPerPage=Math.floor(canvas.width*printableHeight/printableWidth);
+      const fitsSinglePage=canvas.height<=pixelsPerPage*1.22;
+      if(fitsSinglePage){
+        const renderedHeight=canvas.height*printableWidth/canvas.width;
+        const scale=Math.min(1,printableHeight/renderedHeight);
+        const finalWidth=printableWidth*scale,finalHeight=renderedHeight*scale;
+        pdf.setFillColor(33,29,19);pdf.rect(0,0,pageWidth,pageHeight,'F');
+        pdf.addImage(canvas.toDataURL('image/jpeg',.96),'JPEG',(pageWidth-finalWidth)/2,margin,finalWidth,finalHeight,undefined,'FAST');
+      }else{
       let sourceY=0,page=0;
       while(sourceY<canvas.height){
         const sliceHeight=Math.min(pixelsPerPage,canvas.height-sourceY);
@@ -522,6 +530,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         pdf.setFillColor(33,29,19);pdf.rect(0,0,pageWidth,pageHeight,'F');
         pdf.addImage(slice.toDataURL('image/jpeg',.96),'JPEG',margin,margin,printableWidth,renderedHeight,undefined,'FAST');
         sourceY+=sliceHeight;
+      }
       }
       const title=main.querySelector('.page-head h1')?.textContent||'Relatório';
       const filename=`vinicinho-${title.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-')}.pdf`;
