@@ -480,7 +480,61 @@ document.addEventListener('DOMContentLoaded', async () => {
   function openNotifications(){const items=notifications();openModal('Notificações',`<div class="notification-list wide">${items.length?items.map(n=>n.type==='goal'?`<button type="button" class="notification-item goal-notification"><i>${n.icon}</i><span><b>${n.title}</b><small>${n.value}</small></span><em>Ver detalhes →</em></button>`:`<div class="notification-item"><i>${n.icon}</i><span><b>${n.title}</b><small>${n.value}</small></span></div>`).join(''):'<p class="green-text">Tudo em dia. Nenhuma notificação.</p>'}</div>`,()=>{});document.querySelector('.goal-notification')?.addEventListener('click',openGoalAchievement)}
   function openGoalAchievement(){const goal=+savedData.metaDiaria||0,reached=todaySalesTotal(),exceeded=Math.max(0,reached-goal),percent=goal?Math.round(reached/goal*100):0;openModal('Meta diária conquistada!',`<div class="goal-achievement wide"><div class="goal-trophy">🏆</div><p>Resultado de ${new Date().toLocaleDateString('pt-BR')}</p><div class="goal-values"><span><small>Meta definida</small><strong>${money(goal)}</strong></span><span><small>Valor alcançado</small><strong class="green-text">${money(reached)}</strong></span><span><small>Ultrapassou</small><strong class="orange-text">${money(exceeded)}</strong></span></div><div class="goal-detail-progress"><i style="width:${Math.min(percent,100)}%"></i></div><b>${percent}% da meta</b></div>`,()=>{})}
   function pdfSafe(text){return String(text).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7E]/g,' ').replace(/[()\\]/g,'\\$&')}
-  function downloadReportPdf(){const title=main.querySelector('.page-head h1')?.textContent||'Relatório',lines=[`Vinicinho Doces - ${title}`,`Gerado em: ${new Date().toLocaleString('pt-BR')}`];const start=main.querySelector('.report-start')?.value,end=main.querySelector('.report-end')?.value;if(start||end)lines.push(`Periodo: ${start?displayDate(start):'inicio'} ate ${end?displayDate(end):'hoje'}`);lines.push('');main.querySelectorAll('.page-stats .stat-box').forEach(card=>lines.push(`${card.querySelector('span')?.textContent||''}: ${card.querySelector('strong')?.textContent||''}`));lines.push('');main.querySelectorAll('.data-table').forEach(table=>{table.querySelectorAll('tr').forEach(row=>lines.push([...row.cells].map(cell=>cell.innerText.trim()).join(' | ')));lines.push('')});main.querySelectorAll('.result-line').forEach(row=>lines.push(row.innerText.replace(/\n/g,' ')));const content=['BT','/F1 12 Tf','45 800 Td',...lines.slice(0,52).flatMap((line,i)=>i===0?[`(${pdfSafe(line)}) Tj`]:['0 -14 Td',`(${pdfSafe(line)}) Tj`]),'ET'].join('\n');const objects=[null,'<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R] /Count 1 >>','<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',`<< /Length ${content.length} >>\nstream\n${content}\nendstream`,'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];let pdf='%PDF-1.4\n',offsets=[0];for(let i=1;i<objects.length;i++){offsets[i]=pdf.length;pdf+=`${i} 0 obj\n${objects[i]}\nendobj\n`}const xref=pdf.length;pdf+=`xref\n0 ${objects.length}\n0000000000 65535 f \n`;for(let i=1;i<objects.length;i++)pdf+=`${String(offsets[i]).padStart(10,'0')} 00000 n \n`;pdf+=`trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;const blob=new Blob([pdf],{type:'application/pdf'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`vinicinho-${title.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-')}.pdf`;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);showToast('PDF exportado com sucesso')}
+  async function downloadReportPdf(){
+    if(!window.html2canvas||!window.jspdf?.jsPDF)return showToast('As bibliotecas do PDF ainda estão carregando. Tente novamente.');
+    const report=main.querySelector('.page-shell'),button=report?.querySelector('[data-action="Exportar PDF"]');
+    if(!report)return showToast('Não foi possível localizar o relatório.');
+    const originalLabel=button?.textContent;
+    if(button){button.disabled=true;button.textContent='Gerando PDF…'}
+    document.body.classList.add('report-pdf-exporting');
+    try{
+      await document.fonts?.ready;
+      const canvas=await window.html2canvas(report,{
+        scale:2,
+        useCORS:true,
+        allowTaint:false,
+        backgroundColor:'#211d13',
+        logging:false,
+        scrollX:0,
+        scrollY:-window.scrollY,
+        windowWidth:Math.max(1366,report.scrollWidth+80),
+        width:report.scrollWidth,
+        height:report.scrollHeight,
+        onclone:clonedDocument=>{
+          clonedDocument.body.classList.add('report-pdf-clone');
+          const clone=clonedDocument.querySelector('main .page-shell');
+          if(clone){clone.style.width=`${report.scrollWidth}px`;clone.style.maxWidth='none';clone.style.overflow='visible'}
+        }
+      });
+      const {jsPDF}=window.jspdf;
+      const pdf=new jsPDF({orientation:'landscape',unit:'mm',format:'a4',compress:true});
+      const pageWidth=pdf.internal.pageSize.getWidth(),pageHeight=pdf.internal.pageSize.getHeight(),margin=5;
+      const printableWidth=pageWidth-margin*2,printableHeight=pageHeight-margin*2;
+      const pixelsPerPage=Math.floor(canvas.width*printableHeight/printableWidth);
+      let sourceY=0,page=0;
+      while(sourceY<canvas.height){
+        const sliceHeight=Math.min(pixelsPerPage,canvas.height-sourceY);
+        const slice=document.createElement('canvas');
+        slice.width=canvas.width;slice.height=sliceHeight;
+        slice.getContext('2d').drawImage(canvas,0,sourceY,canvas.width,sliceHeight,0,0,canvas.width,sliceHeight);
+        if(page++)pdf.addPage('a4','landscape');
+        const renderedHeight=sliceHeight*printableWidth/canvas.width;
+        pdf.setFillColor(33,29,19);pdf.rect(0,0,pageWidth,pageHeight,'F');
+        pdf.addImage(slice.toDataURL('image/jpeg',.96),'JPEG',margin,margin,printableWidth,renderedHeight,undefined,'FAST');
+        sourceY+=sliceHeight;
+      }
+      const title=main.querySelector('.page-head h1')?.textContent||'Relatório';
+      const filename=`vinicinho-${title.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-')}.pdf`;
+      pdf.save(filename);
+      showToast('PDF exportado com o mesmo layout do relatório');
+    }catch(error){
+      console.error('Erro ao exportar relatório em PDF:',error);
+      showToast('Não foi possível gerar o PDF. Tente novamente.');
+    }finally{
+      document.body.classList.remove('report-pdf-exporting');
+      if(button){button.disabled=false;button.textContent=originalLabel}
+    }
+  }
   function updatePeriodLabel(){const label=main.querySelector('#dateButton span');if(label)label.textContent=`${dashboardPeriod.start.toLocaleDateString('pt-BR')} - ${dashboardPeriod.end.toLocaleDateString('pt-BR')}`}
   function dailySummary(){const t=dashboardTotals();return `${t.sales.length} pedidos • ${money(t.gross)} em vendas • ${money(t.profit)} de lucro`}
   function showPeriodDialog(){openModal('Selecionar período',fieldHTML('Data inicial','inicio','date',dashboardPeriod.start.toISOString().slice(0,10))+fieldHTML('Data final','fim','date',dashboardPeriod.end.toISOString().slice(0,10)),v=>{const start=new Date(v.inicio+'T00:00:00'),end=new Date(v.fim+'T23:59:59');if(end<start)throw Error('A data final deve ser posterior à data inicial.');dashboardPeriod.start=start;dashboardPeriod.end=end;updatePeriodLabel();hydrateDashboard()})}
