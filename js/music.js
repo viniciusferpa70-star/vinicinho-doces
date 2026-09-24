@@ -5,7 +5,8 @@
   const types = {mp3:'audio/mpeg',wav:'audio/wav',ogg:'audio/ogg',oga:'audio/ogg',m4a:'audio/mp4',aac:'audio/aac',flac:'audio/flac',webm:'audio/webm',opus:'audio/ogg'};
   const audio = new Audio();
   audio.preload = 'metadata';
-  let db, tracksRef, playlistsRef, tracks = [], playlists = [], selected = '', search = '';
+  let db, tracksRef, playlistsRef, tracks = [], remoteTracks = [], playlists = [], selected = '', search = '';
+  const pendingTracks = new Map();
   let started = false, loaded = false, importing = false, status = '', current = null, queue = [], sequence = 0, objectUrl = null;
   let shuffle = false, repeat = false, player, loading = false;
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -27,9 +28,29 @@
   }
   pages['Músicas'] = `<section class="page-shell music-page" id="musicPage"></section>`;
 
+  function syncTracks() {
+    const combined = new Map(remoteTracks.map(track => [track.id, track]));
+    for (const [id, track] of pendingTracks) combined.set(id, track);
+    tracks = [...combined.values()].sort((a,b) => a.title.localeCompare(b.title,'pt-BR'));
+  }
+  function playable(track) { return track.status === 'ready' || !!pendingTracks.get(track.id)?.file; }
+  function trackStatus(track) {
+    if (track.status === 'ready') return 'Salva no Firebase';
+    if (track.status === 'error') return `Envio não concluído: ${track.error}`;
+    if (track.status === 'queued') return 'Na fila de envio · já pode reproduzir';
+    if (pendingTracks.has(track.id)) return `${track.phase || 'Enviando ao Firebase'} · ${track.progress || 0}%`;
+    return 'Envio interrompido · selecione o arquivo novamente para concluir';
+  }
+  function cloudRequest(promise) {
+    let timer;
+    return Promise.race([promise, new Promise((_,reject) => {
+      timer = setTimeout(() => reject(Error('O envio demorou demais. Verifique a conexão e use Tentar novamente.')), 60000);
+    })]).finally(() => clearTimeout(timer));
+  }
+
   function visibleTracks() {
     const list = playlists.find(item => item.id === selected);
-    const available = list ? (list.trackIds || []).map(id => tracks.find(t => t.id === id)).filter(Boolean) : tracks;
+    const available = list ? tracks.filter(t => (list.trackIds || []).includes(t.id) || pendingTracks.get(t.id)?.playlistId === selected) : tracks;
     const term = search.toLocaleLowerCase('pt-BR');
     return available.filter(t => `${t.title} ${t.fileName}`.toLocaleLowerCase('pt-BR').includes(term));
   }
@@ -38,11 +59,12 @@
     if (!root) return;
     const visible = visibleTracks();
     root.querySelector('.music-track-list').innerHTML = visible.map((t, i) => `<div class="music-track ${current?.id === t.id ? 'is-playing' : ''}">
-      <button type="button" class="music-track-play" data-track="${escape(t.id)}" aria-label="Reproduzir ${escape(t.title)}">${icon('play')}</button>
-      <span class="music-track-title"><b>${escape(t.title)}</b><small>${escape(t.folder || t.fileName)}</small></span>
+      <button type="button" class="music-track-play" data-track="${escape(t.id)}" aria-label="Reproduzir ${escape(t.title)}" ${playable(t) ? '' : 'disabled'}>${icon('play')}</button>
+      <span class="music-track-title"><b>${escape(t.title)}</b><small>${escape(t.folder || t.fileName)}</small><small class="music-save-state ${t.status === 'error' ? 'music-save-error' : ''}">${escape(trackStatus(t))}</small>${pendingTracks.has(t.id) && t.status !== 'error' ? `<progress max="100" value="${t.progress || 0}" aria-label="Progresso do envio de ${escape(t.title)}"></progress>` : ''}</span>
       <span class="music-size">${(t.size/1048576).toFixed(1)} MB</span><span>${time(t.duration)}</span>
-      <button type="button" data-add="${escape(t.id)}" title="Adicionar à playlist" aria-label="Adicionar ${escape(t.title)} à playlist">${icon('list-plus')}</button>
-      ${selected ? `<button type="button" data-remove="${escape(t.id)}" title="Remover da playlist" aria-label="Remover ${escape(t.title)} da playlist">${icon('x')}</button>` : ''}</div>`).join('') || `<div class="music-empty">${icon('music-2')}<h2>${loaded ? (search ? 'Nenhuma música encontrada' : 'Sua trilha sonora começa aqui') : 'Carregando biblioteca…'}</h2><p>${search ? 'Tente outro nome.' : 'Importe músicas do computador ou adicione faixas a esta playlist.'}</p></div>`;
+      ${t.status === 'error' || (!pendingTracks.has(t.id) && t.status !== 'ready') ? `<button type="button" class="music-retry" data-retry="${escape(t.id)}" ${importing ? 'disabled' : ''}>Tentar novamente</button>` : ''}
+      <button type="button" data-add="${escape(t.id)}" title="Adicionar à playlist" aria-label="Adicionar ${escape(t.title)} à playlist" ${t.status === 'ready' ? '' : 'disabled'}>${icon('list-plus')}</button>
+      ${selected && t.status === 'ready' ? `<button type="button" data-remove="${escape(t.id)}" title="Remover da playlist" aria-label="Remover ${escape(t.title)} da playlist">${icon('x')}</button>` : ''}</div>`).join('') || `<div class="music-empty">${icon('music-2')}<h2>${loaded ? (search ? 'Nenhuma música encontrada' : 'Sua trilha sonora começa aqui') : 'Carregando biblioteca…'}</h2><p>${search ? 'Tente outro nome.' : 'Importe músicas do computador ou adicione faixas a esta playlist.'}</p></div>`;
     root.querySelector('.music-count').textContent = `${visible.length} música${visible.length === 1 ? '' : 's'}`;
     window.lucide?.createIcons();
   }
@@ -53,7 +75,7 @@
     root.innerHTML = `<div class="page-head"><div><h1>Músicas</h1><p>Sua trilha sonora, em qualquer tela.</p></div><button type="button" class="outline-btn" data-music="menu">☰ Menu</button></div>
       <div class="music-hero"><div class="music-cover">${icon('headphones')}</div><div><small>SUA BIBLIOTECA</small><h2>${escape(list?.name || 'Dê ritmo ao seu dia')}</h2><p>Músicas e playlists salvas na sua conta.</p><span class="music-count"></span></div></div>
       <div class="music-toolbar"><button type="button" class="primary-btn" data-music="play-all">${icon('play')} Reproduzir</button><button type="button" class="outline-btn" data-music="files" ${importing ? 'disabled' : ''}>${icon('upload')} Importar músicas</button><button type="button" class="outline-btn" data-music="folder" ${importing ? 'disabled' : ''}>${icon('folder-open')} Importar pasta</button><button type="button" class="outline-btn" data-music="new">${icon('plus')} Nova playlist</button></div>
-      <p class="music-hint">MP3, M4A, WAV, OGG, AAC, FLAC e WebM · até 25 MB por música. Aguarde a confirmação de salvamento antes de fechar o site.</p>
+      <p class="music-hint">MP3, M4A, WAV, OGG, AAC, FLAC e WebM · até 25 MB por música. Você pode ouvir durante o envio. Espere aparecer “Salva no Firebase” antes de fechar o site.</p>
       <p id="musicStatus" class="music-status" role="status" aria-live="polite">${escape(status)}</p>
       <div class="music-layout"><aside class="music-library"><h3>Playlists</h3><button type="button" data-playlist="" class="${!selected ? 'selected' : ''}">${icon('library')} Todas as músicas <span>${tracks.length}</span></button>${playlists.map(p => `<button type="button" data-playlist="${escape(p.id)}" class="${selected === p.id ? 'selected' : ''}">${icon('list-music')} <span>${escape(p.name)}</span><small>${(p.trackIds || []).length}</small></button>`).join('')}</aside>
       <div class="panel music-results"><div class="music-list-head"><h2>${escape(list?.name || 'Todas as músicas')}</h2><input type="search" class="music-search" aria-label="Buscar músicas" placeholder="Buscar músicas…" value="${escape(search)}"></div><div class="music-track-list"></div></div></div>`;
@@ -65,10 +87,15 @@
       if (el.dataset.track) play(el.dataset.track, visibleTracks().map(t => t.id));
       if (el.dataset.add) choosePlaylist(el.dataset.add);
       if (el.dataset.remove) removeFromPlaylist(el.dataset.remove);
+      if (el.dataset.retry) {
+        const pending = pendingTracks.get(el.dataset.retry);
+        if (pending?.file) importFiles([pending.file], pending.playlistId);
+        else chooseFiles(false);
+      }
       const action = el.dataset.music;
       if (action === 'files' || action === 'folder') chooseFiles(action === 'folder');
       if (action === 'new') newPlaylist();
-      if (action === 'play-all' && visibleTracks().length) play(visibleTracks()[0].id, visibleTracks().map(t => t.id));
+      if (action === 'play-all') { const ready = visibleTracks().filter(playable); if (ready.length) play(ready[0].id, ready.map(t => t.id)); }
       if (action === 'menu') document.getElementById('sidebar').classList.add('open');
     };
     renderList();
@@ -85,7 +112,8 @@
       tracksRef = root.collection('musicTracks');
       playlistsRef = root.collection('musicPlaylists');
       tracksRef.onSnapshot(snapshot => {
-        tracks = snapshot.docs.map(d => ({...d.data(), id:d.id})).filter(t => t.status === 'ready').sort((a,b) => a.title.localeCompare(b.title,'pt-BR'));
+        remoteTracks = snapshot.docs.map(d => ({...d.data(), id:d.id}));
+        syncTracks();
         loaded = true; render();
       }, e => message(errorText(e)));
       playlistsRef.onSnapshot(snapshot => {
@@ -125,10 +153,15 @@
     try { await playlistsRef.doc(selected).update({trackIds:firebase.firestore.FieldValue.arrayRemove(id)}); message('Música removida da playlist. Ela continua na biblioteca.'); } catch(e) { message(errorText(e)); }
   }
   function chooseFiles(folder) {
-    if (importing || !tracksRef) return;
+    if (importing) return;
+    if (!tracksRef) return message('Aguarde a conexão com o Firebase e tente novamente.');
     const input = document.createElement('input'); input.type = 'file'; input.multiple = true; input.accept = 'audio/*,.mp3,.m4a,.wav,.ogg,.oga,.aac,.flac,.webm,.opus';
     if (folder) input.setAttribute('webkitdirectory','');
-    input.onchange = () => importFiles(Array.from(input.files)); input.click();
+    input.hidden = true;
+    document.body.appendChild(input);
+    input.onchange = () => { const files = Array.from(input.files || []); input.remove(); if(files.length) importFiles(files); };
+    input.oncancel = () => input.remove();
+    input.click();
   }
   async function durationOf(file) {
     return new Promise(resolve => {
@@ -139,48 +172,75 @@
       probe.onerror = () => finish(0); probe.src = url;
     });
   }
-  async function importFiles(files) {
+  async function importFiles(files, destination = selected) {
     if (importing || !tracksRef) return;
-    importing = true; render();
-    const destination = selected;
+    importing = true;
+    search = '';
     let saved = 0, skipped = 0, failed = 0;
     const failures = [];
+    const entries = [];
+    for (const file of files) {
+      const mime = types[file.name.split('.').pop().toLowerCase()] || (file.type.startsWith('audio/') ? file.type : '');
+      if (!mime) { skipped++; continue; }
+      const previous = [...pendingTracks.values()].find(t => t.file === file);
+      const entry = previous || {id:`local-${crypto.randomUUID()}`,title:file.name.replace(/\.[^.]+$/,''),fileName:file.name,folder:(file.webkitRelativePath || '').split('/').slice(0,-1).join('/'),size:file.size,mime,duration:0,file,playlistId:destination};
+      Object.assign(entry,{status:'queued',progress:0,error:''});
+      pendingTracks.set(entry.id,entry); entries.push(entry);
+    }
+    syncTracks(); render();
+    message(entries.length ? `${entries.length} música(s) selecionada(s). Você já pode reproduzir enquanto o envio é concluído. Mantenha o site aberto.` : 'Nenhum arquivo de áudio encontrado. Escolha MP3, M4A, WAV, OGG, AAC, FLAC ou WebM.');
     try {
-      for (let index = 0; index < files.length; index++) {
-        const file = files[index], ext = file.name.split('.').pop().toLowerCase(), mime = types[ext];
-        if (!mime) { skipped++; continue; }
+      for (let index = 0; index < entries.length; index++) {
+        const entry = entries[index], file = entry.file, mime = entry.mime;
         let ref, chunkCount = 0, complete = false;
         try {
           if (!file.size || file.size > MAX_SIZE) throw Error('Arquivo vazio ou maior que 25 MB.');
           if (!audio.canPlayType(mime)) throw Error('Este formato não é reproduzido neste navegador.');
+          entry.status = 'uploading'; entry.phase = 'Preparando arquivo'; renderList();
+          message(`Preparando ${index+1}/${entries.length}: ${file.name}`);
           const bytes = new Uint8Array(await file.arrayBuffer());
           const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)), b => b.toString(16).padStart(2,'0')).join('');
+          const oldId = entry.id;
+          pendingTracks.delete(oldId); entry.id = hash; pendingTracks.set(hash, entry);
+          if (current?.id === oldId) current = entry;
+          queue = queue.map(id => id === oldId ? hash : id);
+          syncTracks(); renderList();
           // Deterministic IDs make retries safe and avoid importing the same audio twice.
           ref = tracksRef.doc(hash);
-          const existing = await ref.get({source:'server'});
+          const existing = await cloudRequest(ref.get({source:'server'}));
           if (existing.exists && existing.data().status === 'ready') {
-            if (destination) await playlistsRef.doc(destination).update({trackIds:firebase.firestore.FieldValue.arrayUnion(hash)});
+            complete = true;
+            remoteTracks = [...remoteTracks.filter(t => t.id !== hash), {...existing.data(),id:hash}];
+            if (destination) await cloudRequest(playlistsRef.doc(destination).update({trackIds:firebase.firestore.FieldValue.arrayUnion(hash)}));
+            pendingTracks.delete(hash); syncTracks(); render();
             skipped++; continue;
           }
           chunkCount = Math.ceil(bytes.length / CHUNK_SIZE);
           const metadata = {title:file.name.replace(/\.[^.]+$/,''),fileName:file.name,folder:(file.webkitRelativePath || '').split('/').slice(0,-1).join('/'),size:file.size,mime,chunkCount,duration:await durationOf(file),status:'uploading',createdAt:firebase.firestore.FieldValue.serverTimestamp()};
-          await ref.set(metadata);
-          for (let offset = 0; offset < chunkCount; offset += 8) {
+          entry.duration = metadata.duration;
+          await cloudRequest(ref.set(metadata));
+          for (let offset = 0; offset < chunkCount; offset += 2) {
+            entry.phase = navigator.onLine ? 'Enviando ao Firebase' : 'Aguardando conexão'; renderList();
+            message(`Enviando ${index+1}/${entries.length}: ${file.name} — ${entry.progress}%`);
             const batch = db.batch();
-            for (let n = offset; n < Math.min(offset+8, chunkCount); n++) batch.set(ref.collection('musicChunks').doc(String(n).padStart(4,'0')), {index:n,data:firebase.firestore.Blob.fromUint8Array(bytes.slice(n*CHUNK_SIZE,(n+1)*CHUNK_SIZE))});
-            await batch.commit();
-            message(`Importando ${index+1}/${files.length}: ${file.name} — ${Math.round(Math.min(offset+8,chunkCount)/chunkCount*100)}%`);
+            for (let n = offset; n < Math.min(offset+2, chunkCount); n++) batch.set(ref.collection('musicChunks').doc(String(n).padStart(4,'0')), {index:n,data:firebase.firestore.Blob.fromUint8Array(bytes.slice(n*CHUNK_SIZE,(n+1)*CHUNK_SIZE))});
+            await cloudRequest(batch.commit());
+            entry.progress = Math.round(Math.min(offset+2,chunkCount)/chunkCount*100); renderList();
           }
-          await ref.update({status:'ready'}); complete = true; saved++;
-          if (destination) await playlistsRef.doc(destination).update({trackIds:firebase.firestore.FieldValue.arrayUnion(ref.id)});
+          entry.phase = 'Confirmando salvamento'; renderList();
+          await cloudRequest(ref.update({status:'ready'})); complete = true; saved++;
+          remoteTracks = [...remoteTracks.filter(t => t.id !== entry.id), {...metadata,id:entry.id,status:'ready'}];
+          if (destination) await cloudRequest(playlistsRef.doc(destination).update({trackIds:firebase.firestore.FieldValue.arrayUnion(ref.id)}));
+          pendingTracks.delete(entry.id); syncTracks(); render(); updatePlayer();
         } catch(error) {
+          entry.status = 'error'; entry.error = errorText(error); syncTracks(); renderList();
           failed++; failures.push(`${file.name}: ${errorText(error)}${complete ? ' A música está salva na biblioteca, mas não foi adicionada à playlist.' : ''}`);
           // Keep incomplete blocks hidden; the same content hash resumes/overwrites on retry.
         }
       }
     } finally {
       importing = false;
-      message(`${saved} salva(s) no Firebase; ${skipped} já existente(s) ou arquivo(s) não musical(is); ${failed} falha(s).${failures.length ? ' '+failures.join(' | ') : ''}`);
+      message(`${saved} salva(s) no Firebase; ${skipped} já existente(s) ou arquivo(s) não musical(is); ${failed} falha(s).${!entries.length ? ' Nenhuma música compatível foi encontrada na seleção.' : ''}${failures.length ? ' '+failures.join(' | ') : ''}`);
       render();
     }
   }
@@ -207,7 +267,7 @@
   function updatePlayer() {
     if (!player) return;
     player.querySelector('.music-now-title').textContent = current?.title || '';
-    player.querySelector('.music-now-subtitle').textContent = loading ? 'Carregando áudio…' : (audio.paused ? 'Pausado' : 'Reproduzindo');
+    player.querySelector('.music-now-subtitle').textContent = loading ? 'Carregando áudio…' : `${audio.paused ? 'Pausado' : 'Reproduzindo'}${pendingTracks.has(current?.id) ? ' · salvamento pendente' : ''}`;
     const toggle = player.querySelector('[data-music=toggle]');
     toggle.innerHTML = icon(audio.paused ? 'play' : 'pause'); toggle.disabled = loading;
     toggle.setAttribute('aria-label',audio.paused ? 'Reproduzir' : 'Pausar'); toggle.title = toggle.getAttribute('aria-label');
@@ -217,28 +277,32 @@
   }
   async function play(id, newQueue) {
     const track = tracks.find(t => t.id === id); if (!track) return;
+    if (!playable(track)) return message('O envio desta música foi interrompido. Use Tentar novamente e selecione o arquivo original.');
     const ticket = ++sequence; if (newQueue) queue = newQueue.slice();
     if (current?.id === id && objectUrl && !loading && audio.readyState >= 1) {
       audio.currentTime = 0;
-      try { await audio.play(); message(''); } catch(e) { message(errorText(e)); }
+      try { await audio.play(); if (!importing) message(''); } catch(e) { message(errorText(e)); }
       return;
     }
     audio.pause(); audio.removeAttribute('src'); audio.load();
     if (objectUrl) URL.revokeObjectURL(objectUrl); objectUrl = null;
-    current = track; loading = true; ensurePlayer(); updatePlayer(); renderList(); message('Carregando música…');
+    current = track; loading = true; ensurePlayer(); updatePlayer(); renderList(); if (!importing) message('Carregando música…');
     try {
-      const snapshot = await tracksRef.doc(id).collection('musicChunks').orderBy('index').get({source:'server'});
-      if (ticket !== sequence) return;
-      if (snapshot.size !== track.chunkCount) throw Error('Arquivo incompleto. Importe esta música novamente.');
-      const blob = new Blob(snapshot.docs.map(d => d.data().data.toUint8Array()),{type:track.mime});
-      if (blob.size !== track.size) throw Error('O áudio está incompleto. Importe novamente.');
+      let blob = pendingTracks.get(id)?.file;
+      if (!blob) {
+        const snapshot = await cloudRequest(tracksRef.doc(id).collection('musicChunks').orderBy('index').get({source:'server'}));
+        if (ticket !== sequence) return;
+        if (snapshot.size !== track.chunkCount) throw Error('Arquivo incompleto. Importe esta música novamente.');
+        blob = new Blob(snapshot.docs.map(d => d.data().data.toUint8Array()),{type:track.mime});
+        if (blob.size !== track.size) throw Error('O áudio está incompleto. Importe novamente.');
+      }
       objectUrl = URL.createObjectURL(blob); audio.src = objectUrl; loading = false; updatePlayer();
       if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({title:track.title,artist:'Vinicinho Doces'});
-      await audio.play(); if (ticket === sequence) message('');
+      await audio.play(); if (ticket === sequence && !importing) message('');
     } catch(e) { if (ticket === sequence) { loading = false; updatePlayer(); message(e.name === 'NotAllowedError' ? 'Áudio carregado. Toque em reproduzir para ouvir.' : errorText(e)); } }
   }
   function next(direction, ended = false) {
-    const available = queue.filter(id => tracks.some(t => t.id === id)); if (!available.length) return;
+    const available = queue.filter(id => tracks.some(t => t.id === id && playable(t))); if (!available.length) return;
     let index = available.indexOf(current?.id) + direction;
     if (shuffle && available.length > 1) { const others = available.filter(id => id !== current?.id); return play(others[Math.floor(Math.random()*others.length)]); }
     if (ended && index >= available.length && !repeat) { updatePlayer(); return; }
