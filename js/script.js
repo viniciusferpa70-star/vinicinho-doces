@@ -40,6 +40,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     {key:'fornecedores',page:'Fornecedores',label:'Cadastro de fornecedores',description:'Fornecedores, contatos e condições de compra.'},
     {key:'pontosVenda',page:'Pontos de Venda',label:'Pontos de venda',description:'Lojas, canais e locais de comercialização.'},
     {key:'relatorios',page:'Relatórios',label:'Tela de relatórios',description:'Relatórios financeiros, vendas e estoque.'},
+    {key:'musicas',page:'Músicas',label:'Músicas e playlists',description:'Importação de músicas e player em todas as telas.'},
     {key:'importarXml',feature:'xml',label:'Importar XML / NFC-e',description:'Importação de compras e identificação de produtos.'},
     {key:'cardapios',feature:'cardapios',label:'Criar e editar cardápios',description:'Editor de frente, verso e exportação para PDF.'},
     {key:'assistenteIa',feature:'ia',label:'Assistente IA',description:'Consultas e ações assistidas dentro do sistema.'}
@@ -114,6 +115,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('dateButton').addEventListener('click', () => showToast('Período selecionado: maio de 2024'));
   document.getElementById('notifyButton').addEventListener('click', () => showToast('Você tem 3 novas notificações'));
   function bindPageActions(){
+    window.VinicinhoMusic?.mount();
     if(parameterEnabled('cardapios')&&main.querySelector('.page-head h1')?.textContent==='Produtos e receitas'&&!main.querySelector('[data-action="Criar cardápio"]')){
       const actions=main.querySelector('.page-head');
       const button=document.createElement('button');button.className='outline-btn menu-editor-launch';button.dataset.action='Criar cardápio';button.textContent='▤ Criar cardápio';actions.appendChild(button);
@@ -140,7 +142,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if(window.lucide) lucide.createIcons();
   }
   window.openPage = name => { if(name==='Dashboard'||pages[name])openPage(name) };
-  const hashRoutes = {clientes:'Clientes',fornecedores:'Fornecedores'};
+  const hashRoutes = {clientes:'Clientes',fornecedores:'Fornecedores',musicas:'Músicas'};
   function openHashRoute(){const route=hashRoutes[location.hash.slice(1).toLowerCase()];if(route)window.openPage(route)}
   window.addEventListener('hashchange',openHashRoute);
   main.addEventListener('click',event=>{const id=event.target.closest('button')?.id;if(id==='summaryButton')showToast(dailySummary());if(id==='dateButton')showPeriodDialog();if(id==='notifyButton')openNotifications();if(id==='settingsButton')openSettings();if(id==='aiAssistantButton')ensureAIPanel().classList.add('open')});

@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owner() {
+      return request.auth != null && request.auth.token.email == 'viniciusferpa70@gmail.com';
+    }
+    match /businesses/vinicinho-doces {
+      allow read, write: if owner();
+      match /musicTracks/{track} {
+        allow read, write: if owner();
+        match /musicChunks/{chunk} {
+          allow read, write: if owner();
+        }
+      }
+      match /musicPlaylists/{playlist} {
+        allow read, write: if owner();
+      }
+    }
+  }
+}
