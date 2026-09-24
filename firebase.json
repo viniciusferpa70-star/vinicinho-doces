@@ -9,6 +9,8 @@
       "output/**",
       "tmp/**",
       "**/.*",
+      "**/.*/**",
+      "**/*.log",
       "**/node_modules/**"
     ],
     "cleanUrls": true,
