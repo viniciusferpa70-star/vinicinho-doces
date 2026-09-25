@@ -19,9 +19,32 @@
   const auth = firebase.auth();
   const db = firebase.firestore();
   const dataRef = db.collection('businesses').doc('vinicinho-doces');
+  const catalogRef = db.collection('storefront').doc('catalog');
   const STORAGE_KEY = 'vinicinho-doces-dados-limpos-v2';
   let saveTimer = null;
   let lastPayload = null;
+
+  function productGroup(name = '') {
+    const value = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    if (value.includes('cone')) return 'Cones Trufados';
+    if (value.includes('pao de mel')) return 'Pão de Mel';
+    if (value.includes('bala')) return 'Bala de Ninho';
+    if (value.includes('bolo de pote') || value.includes('mousse')) return 'Bolos de pote';
+    return '';
+  }
+
+  async function publishCatalog(payload) {
+    const products = (payload?.produtos || []).filter(product => product.tipo !== 'Ingrediente').map(product => ({
+      id: String(product.id || product.nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+      name: product.nome || 'Produto',
+      group: productGroup(product.nome),
+      price: +product.preco || 0,
+      stock: Math.max(0, Math.floor(+product.estoque || 0)),
+      emoji: product.emoji || '🍬',
+      description: product.descricao || ''
+    })).filter(product => product.group);
+    await catalogRef.set({products, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}, {merge: true});
+  }
 
   function recordCount(data) {
     return ['vendas','produtos','despesas','clientes','fornecedores','preVendas','servicos','producoes','caixa']
@@ -83,11 +106,14 @@
       const cloudData = snapshot.data().payload;
       if (recordCount(localData) > recordCount(cloudData)) {
         await dataRef.set({payload: localData, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), owner: ALLOWED_EMAIL});
+        await publishCatalog(localData);
         return localData;
       }
+      await publishCatalog(cloudData);
       return cloudData;
     }
     await dataRef.set({payload: localData, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), owner: ALLOWED_EMAIL});
+    await publishCatalog(localData);
     return localData;
   }
 
@@ -97,6 +123,7 @@
     saveTimer = setTimeout(async () => {
       try {
         await dataRef.set({payload: lastPayload, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), owner: ALLOWED_EMAIL});
+        await publishCatalog(lastPayload);
         window.dispatchEvent(new CustomEvent('vinicinho-cloud-saved'));
       } catch (error) {
         console.error('Falha ao sincronizar com o Firebase:', error);
@@ -109,6 +136,28 @@
     clearTimeout(saveTimer);
     lastPayload = JSON.parse(JSON.stringify(payload));
     await dataRef.set({payload: lastPayload, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), owner: ALLOWED_EMAIL});
+    await publishCatalog(lastPayload);
+  }
+
+  function listenStorefrontOrders(callback) {
+    return db.collectionGroup('orders').orderBy('createdAt', 'desc').onSnapshot(snapshot => {
+      callback(snapshot.docs.map(doc => ({id: doc.id, customerKey: doc.ref.parent.parent.id, ...doc.data()})));
+    }, error => console.error('Falha ao acompanhar pedidos da loja:', error));
+  }
+
+  function updateStorefrontOrder(order, changes) {
+    return db.collection('storefrontCustomers').doc(order.customerKey).collection('orders').doc(order.id).update({
+      ...changes,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
+
+  function addStorefrontMessage(order, text) {
+    return updateStorefrontOrder(order, {
+      messages: firebase.firestore.FieldValue.arrayUnion({sender:'admin', text, createdAt:new Date().toISOString()}),
+      customerUnread: true,
+      adminUnread: false
+    });
   }
 
   const localData = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{"vendas":[],"produtos":[],"despesas":[],"pagamentos":[],"clientes":[],"fornecedores":[]}');
@@ -122,5 +171,5 @@
     throw error;
   });
 
-  window.VinicinhoCloud = {ready, initialize, save, saveNow};
+  window.VinicinhoCloud = {ready, initialize, save, saveNow, publishCatalog, listenStorefrontOrders, updateStorefrontOrder, addStorefrontMessage};
 })();

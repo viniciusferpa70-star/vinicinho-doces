@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#3a1608">
+  <title>Peça Vinicinho Doces</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Lobster&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="store.css?v=1">
+</head>
+<body>
+  <main>
+    <section class="entry-screen" id="entryScreen">
+      <div class="entry-card">
+        <img src="../assets/logo-vinicinho-sem-fundo.png" alt="Vinicinho Doces">
+        <h1>Seu momento mais doce começa aqui</h1>
+        <p>Entre de um jeito simples para escolher seus doces.</p>
+        <div class="entry-tabs"><button class="active" data-entry-tab="register">Primeiro acesso</button><button data-entry-tab="login">Já tenho cadastro</button></div>
+        <form id="registerForm" class="entry-form active">
+          <label>Seu nome<input name="name" autocomplete="name" placeholder="Como podemos chamar você?" required></label>
+          <label>Telefone<input name="phone" inputmode="tel" autocomplete="tel" placeholder="(17) 99999-9999" required></label>
+          <button type="submit">Criar cadastro e pedir</button>
+        </form>
+        <form id="loginForm" class="entry-form">
+          <label>Telefone cadastrado<input name="phone" inputmode="tel" autocomplete="tel" placeholder="(17) 99999-9999" required></label>
+          <button type="submit">Entrar com telefone</button>
+        </form>
+        <div class="entry-divider"><span>ou</span></div>
+        <form id="guestForm" class="guest-form"><input name="name" placeholder="Digite apenas seu nome" required><button type="submit">Continuar sem cadastro</button></form>
+        <p class="form-message" id="entryMessage"></p>
+      </div>
+    </section>
+
+    <section class="store-screen hidden" id="storeScreen">
+      <header class="store-header">
+        <img src="../assets/logo-vinicinho-sem-fundo.png" alt="Vinicinho Doces">
+        <div><small>Olá,</small><strong id="customerName">Cliente</strong></div>
+        <div class="header-actions"><button id="ordersButton" aria-label="Meus pedidos">🔔<b id="notificationCount">0</b></button><button id="cartButton" class="cart-button">🛒 <span id="cartCount">0</span></button><button id="logoutButton" aria-label="Sair">Sair</button></div>
+      </header>
+      <section class="welcome"><div><span>Feito com carinho ♥</span><h1>O que você quer saborear hoje?</h1><p>Escolha uma categoria e adicione seus favoritos ao carrinho.</p></div><img src="../assets/logo-circular-sem-fundo.png" alt="Mascote Vinicinho Doces"></section>
+      <section class="content-section"><div class="section-title"><div><small>Nosso cardápio</small><h2>Escolha uma categoria</h2></div><button id="showAllButton">Ver todos</button></div><div class="group-grid" id="groupGrid"></div></section>
+      <section class="content-section products-section" id="productsSection"><div class="section-title"><div><small>Doces disponíveis</small><h2 id="productsTitle">Todos os produtos</h2></div></div><div class="product-grid" id="productGrid"></div><p class="empty-message hidden" id="emptyProducts">Nenhum produto disponível nesta categoria.</p></section>
+      <footer>Vinicinho Doces • Peça, acompanhe e converse com a gente ♥</footer>
+    </section>
+  </main>
+
+  <div class="backdrop hidden" id="cartModal"><section class="modal"><button class="modal-close" data-close="cartModal">×</button><h2>Seu carrinho</h2><div id="cartItems"></div><div class="cart-total"><span>Total</span><strong id="cartTotal">R$ 0,00</strong></div><button class="primary-action" id="checkoutButton">Continuar pedido</button></section></div>
+  <div class="backdrop hidden" id="checkoutModal"><section class="modal"><button class="modal-close" data-close="checkoutModal">×</button><h2>Como você quer receber?</h2><div class="fulfillment-options"><label><input type="radio" name="fulfillment" value="encomenda" checked><span>📅<b>Encomendar</b><small>Escolha uma data a partir de amanhã.</small></span></label><label id="deliveryOption"><input type="radio" name="fulfillment" value="entrega"><span>🛵<b>Pedir para entregar</b><small>Disponível quando todos os itens estão em estoque.</small></span></label></div><label class="checkout-field" id="dateField">Data para receber<input type="date" id="deliveryDate"></label><label class="checkout-field hidden" id="addressField">Local de entrega<textarea id="deliveryAddress" placeholder="Rua, número, bairro e referência"></textarea></label><p class="checkout-warning" id="checkoutWarning"></p><button class="primary-action" id="placeOrderButton">Enviar pedido</button></section></div>
+  <div class="backdrop hidden" id="ordersModal"><section class="modal orders-modal"><button class="modal-close" data-close="ordersModal">×</button><h2>Meus pedidos</h2><div id="ordersList"></div></section></div>
+  <div class="backdrop hidden" id="orderDetailModal"><section class="modal order-detail-modal"><button class="modal-close" data-close="orderDetailModal">×</button><div id="orderDetail"></div></section></div>
+  <div class="toast" id="toast"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore-compat.js"></script>
+  <script src="store.js?v=1"></script>
+</body>
+</html>

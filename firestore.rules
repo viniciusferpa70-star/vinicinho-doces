@@ -16,5 +16,37 @@ service cloud.firestore {
         allow read, write: if owner();
       }
     }
+
+    match /storefront/catalog {
+      allow read: if true;
+      allow write: if owner();
+    }
+
+    match /storefrontCustomers/{customerKey} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if request.resource.data.key == customerKey
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100;
+      allow delete: if owner();
+
+      match /orders/{orderId} {
+        allow get, list: if true;
+        allow create: if request.resource.data.customerKey == customerKey
+          && request.resource.data.customerName is string
+          && request.resource.data.items is list
+          && request.resource.data.items.size() > 0
+          && request.resource.data.total is number
+          && request.resource.data.total >= 0
+          && request.resource.data.status == 'novo';
+        allow update: if owner() || (
+          request.resource.data.customerKey == resource.data.customerKey
+          && request.resource.data.status == resource.data.status
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['messages','adminUnread','customerUnread','updatedAt'])
+        );
+        allow delete: if owner();
+      }
+    }
   }
 }
