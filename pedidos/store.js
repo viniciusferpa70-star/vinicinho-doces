@@ -20,7 +20,7 @@
     state.ordersUnsubscribe?.();state.ordersUnsubscribe=db.collection('storefrontCustomers').doc(state.customer.key).collection('orders').orderBy('createdAt','desc').onSnapshot(snapshot=>{state.orders=snapshot.docs.map(doc=>({id:doc.id,...doc.data()}));renderOrders();updateNotifications()});
   }
   function renderGroups(){
-    $('#groupGrid').innerHTML=groups.map(group=>{const count=state.products.filter(product=>product.group===group.name).length;return `<button class="group-card ${state.activeGroup===group.name?'active':''}" data-group="${escape(group.name)}"><span>${group.icon}</span><b>${escape(group.name)}</b><small>${count} opção${count===1?'':'ões'}</small></button>`}).join('');
+    $('#groupGrid').innerHTML=groups.map(group=>{const count=state.products.filter(product=>product.group===group.name).length;return `<button class="group-card ${state.activeGroup===group.name?'active':''}" data-group="${escape(group.name)}"><span>${group.icon}</span><b>${escape(group.name)}</b><small>${count} ${count===1?'opção':'opções'}</small></button>`}).join('');
     document.querySelectorAll('[data-group]').forEach(button=>button.onclick=()=>{state.activeGroup=button.dataset.group;renderGroups();renderProducts();$('#productsSection').scrollIntoView({behavior:'smooth'})});
   }
   function renderProducts(){

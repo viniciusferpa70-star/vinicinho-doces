@@ -140,8 +140,10 @@
   }
 
   function listenStorefrontOrders(callback) {
-    return db.collectionGroup('orders').orderBy('createdAt', 'desc').onSnapshot(snapshot => {
-      callback(snapshot.docs.map(doc => ({id: doc.id, customerKey: doc.ref.parent.parent.id, ...doc.data()})));
+    return db.collectionGroup('orders').onSnapshot(snapshot => {
+      const orders=snapshot.docs.map(doc => ({id: doc.id, customerKey: doc.ref.parent.parent.id, ...doc.data()}));
+      orders.sort((a,b)=>(b.createdAt?.toMillis?.()||0)-(a.createdAt?.toMillis?.()||0));
+      callback(orders);
     }, error => console.error('Falha ao acompanhar pedidos da loja:', error));
   }
 
