@@ -8,13 +8,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Lobster&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="store.css?v=1">
+  <link rel="stylesheet" href="/pedidos/store.css?v=2">
 </head>
 <body>
   <main>
     <section class="entry-screen" id="entryScreen">
       <div class="entry-card">
-        <img src="../assets/logo-vinicinho-sem-fundo.png" alt="Vinicinho Doces">
+        <img src="/assets/logo-vinicinho-sem-fundo.png" alt="Vinicinho Doces">
         <h1>Seu momento mais doce começa aqui</h1>
         <p>Entre de um jeito simples para escolher seus doces.</p>
         <div class="entry-tabs"><button class="active" data-entry-tab="register">Primeiro acesso</button><button data-entry-tab="login">Já tenho cadastro</button></div>
@@ -35,11 +35,11 @@
 
     <section class="store-screen hidden" id="storeScreen">
       <header class="store-header">
-        <img src="../assets/logo-vinicinho-sem-fundo.png" alt="Vinicinho Doces">
+        <img src="/assets/logo-vinicinho-sem-fundo.png" alt="Vinicinho Doces">
         <div><small>Olá,</small><strong id="customerName">Cliente</strong></div>
         <div class="header-actions"><button id="ordersButton" aria-label="Meus pedidos">🔔<b id="notificationCount">0</b></button><button id="cartButton" class="cart-button">🛒 <span id="cartCount">0</span></button><button id="logoutButton" aria-label="Sair">Sair</button></div>
       </header>
-      <section class="welcome"><div><span>Feito com carinho ♥</span><h1>O que você quer saborear hoje?</h1><p>Escolha uma categoria e adicione seus favoritos ao carrinho.</p></div><img src="../assets/logo-circular-sem-fundo.png" alt="Mascote Vinicinho Doces"></section>
+      <section class="welcome"><div><span>Feito com carinho ♥</span><h1>O que você quer saborear hoje?</h1><p>Escolha uma categoria e adicione seus favoritos ao carrinho.</p></div><img src="/assets/logo-circular-sem-fundo.png" alt="Mascote Vinicinho Doces"></section>
       <section class="content-section"><div class="section-title"><div><small>Nosso cardápio</small><h2>Escolha uma categoria</h2></div><button id="showAllButton">Ver todos</button></div><div class="group-grid" id="groupGrid"></div></section>
       <section class="content-section products-section" id="productsSection"><div class="section-title"><div><small>Doces disponíveis</small><h2 id="productsTitle">Todos os produtos</h2></div></div><div class="product-grid" id="productGrid"></div><p class="empty-message hidden" id="emptyProducts">Nenhum produto disponível nesta categoria.</p></section>
       <footer>Vinicinho Doces • Peça, acompanhe e converse com a gente ♥</footer>
@@ -54,6 +54,6 @@
 
   <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore-compat.js"></script>
-  <script src="store.js?v=1"></script>
+  <script src="/pedidos/store.js?v=2"></script>
 </body>
 </html>

@@ -48,5 +48,9 @@ service cloud.firestore {
         allow delete: if owner();
       }
     }
+
+    match /{path=**}/orders/{orderId} {
+      allow read: if owner();
+    }
   }
 }
