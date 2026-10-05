@@ -39,6 +39,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     {key:'clientes',page:'Clientes',label:'Cadastro de clientes',description:'Contatos e histórico dos clientes.'},
     {key:'fornecedores',page:'Fornecedores',label:'Cadastro de fornecedores',description:'Fornecedores, contatos e condições de compra.'},
     {key:'pontosVenda',page:'Pontos de Venda',label:'Pontos de venda',description:'Lojas, canais e locais de comercialização.'},
+    {key:'sitePedidos',page:'Site de Pedidos',label:'Configuração do site de pedidos',description:'Grupos, fotos e produtos exibidos no cardápio dos clientes.'},
     {key:'relatorios',page:'Relatórios',label:'Tela de relatórios',description:'Relatórios financeiros, vendas e estoque.'},
     {key:'musicas',page:'Músicas',label:'Músicas e playlists',description:'Importação de músicas e player em todas as telas.'},
     {key:'importarXml',feature:'xml',label:'Importar XML / NFC-e',description:'Importação de compras e identificação de produtos.'},
@@ -77,10 +78,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     {nome:'Chocolate',tipo:'Ingrediente',preco:1.80,custo:1.80,descricao:'Ingrediente para produção.',ingredientes:[]}
   );
   if(savedData.instalarDadosDemonstracao)defaultProducts.forEach(item=>{if(!savedData.produtos.some(p=>p.nome===item.nome))savedData.produtos.push(item)});
-  savedData.produtos.forEach(p=>{p.preco=+p.preco||0;p.custo=+p.custo||0;p.estoque=+p.estoque||0;p.ingredientes||=[];p.combos||=[]});
+  function storefrontProductId(product){return String(product.id||product.nome||'produto').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}
+  savedData.produtos.forEach(p=>{p.id||=storefrontProductId(p);p.preco=+p.preco||0;p.custo=+p.custo||0;p.estoque=+p.estoque||0;p.ingredientes||=[];p.combos||=[]});
   const emojiDefaults={'Bala de Ninho':'🍬','Mousse':'🍮','Cone Ferrero':'🍫','Refrigerante lata':'🥤','Leite em pó':'🥛','Leite condensado':'🥫','Açúcar':'🧂','Embalagem':'📦','Chocolate':'🍫'};
   savedData.produtos.forEach(p=>p.emoji||=emojiDefaults[p.nome]||'🍭');
-  let selectedProduct=null, selectedPoint=null, selectedExpense=null, selectedService=null, runtimeBackupDirectory=null, storefrontOrders=[];
+  const defaultStorefrontGroups=[
+    {id:'cones-trufados',nome:'Cones Trufados',emoji:'🍦',match:/cone/i},
+    {id:'pao-de-mel',nome:'Pão de Mel',emoji:'🍯',match:/p[aã]o de mel/i},
+    {id:'bala-de-ninho',nome:'Bala de Ninho',emoji:'🍬',match:/bala/i},
+    {id:'bolos-de-pote',nome:'Bolos de pote',emoji:'🍰',match:/bolo de pote|mousse/i}
+  ];
+  savedData.storefrontGroups ||= defaultStorefrontGroups.map((group,ordem)=>({id:group.id,nome:group.nome,emoji:group.emoji,imagem:'',ativo:true,ordem,productIds:savedData.produtos.filter(product=>product.tipo!=='Ingrediente'&&group.match.test(product.nome)).map(storefrontProductId)}));
+  savedData.storefrontGroups.forEach((group,index)=>{group.id||=`grupo-${Date.now()}-${index}`;group.nome||='Novo grupo';group.emoji||='🍬';group.imagem||='';group.ativo=group.ativo!==false;group.ordem=Number.isFinite(+group.ordem)?+group.ordem:index;group.productIds=Array.isArray(group.productIds)?group.productIds:[]});
+  let selectedProduct=null, selectedPoint=null, selectedExpense=null, selectedService=null, selectedStorefrontGroupId=null, pendingStorefrontImage='', runtimeBackupDirectory=null, storefrontOrders=[];
   let toastTimer;
   function showToast(message) {
     toast.textContent = message;
@@ -125,6 +135,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const button=document.createElement('button');button.className='outline-btn xml-import-launch';button.dataset.action='Importar XML';button.textContent='⇧ Importar XML / NFC-e';main.querySelector('.page-head').appendChild(button);
     }
     window.vinicinhoSavedPoints=savedData.pontos.filter(point=>point.ativo).map(point=>point.nome);
+    if(main.querySelector('.storefront-config-page'))hydrateStorefrontConfig();
     main.querySelectorAll('[data-action]').forEach(button=>button.addEventListener('click',()=>handleAction(button.dataset.action,button)));
     main.querySelectorAll('[data-report]').forEach(button=>button.addEventListener('click',()=>{main.innerHTML=reportPage(button.dataset.report);bindPageActions()}));
     main.querySelectorAll('.report-period-filter input').forEach(input=>input.addEventListener('change',hydratePeriodReport));
@@ -169,6 +180,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     savedData.pagamentosDespesas.forEach(record=>record.caixaId||=savedData.despesas.find(expense=>expense.id===record.expenseId)?.caixaId||accountId);
     localStorage.setItem(STORAGE_KEY,JSON.stringify(savedData));
     window.VinicinhoCloud?.save(savedData);
+  }
+  function escapeStorefront(value){return String(value??'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]))}
+  function sortedStorefrontGroups(){return [...savedData.storefrontGroups].sort((a,b)=>(+a.ordem||0)-(+b.ordem||0))}
+  function storefrontGroupVisual(group){return group.imagem?`<img src="${group.imagem}" alt="">`:`<span>${escapeStorefront(group.emoji||'🍬')}</span>`}
+  function hydrateStorefrontConfig(){
+    const list=main.querySelector('.storefront-group-list'),form=main.querySelector('.storefront-group-editor'),empty=main.querySelector('.storefront-empty');if(!list||!form)return;
+    const groups=sortedStorefrontGroups();if(!groups.some(group=>group.id===selectedStorefrontGroupId))selectedStorefrontGroupId=groups[0]?.id||null;
+    main.querySelector('.storefront-group-count').textContent=`${groups.length} ${groups.length===1?'grupo':'grupos'}`;
+    list.innerHTML=groups.length?groups.map((group,index)=>`<article class="storefront-group-row ${group.id===selectedStorefrontGroupId?'selected':''}" data-storefront-group="${escapeStorefront(group.id)}"><button class="storefront-group-select" type="button">${storefrontGroupVisual(group)}<span><b>${escapeStorefront(group.nome)}</b><small>${group.productIds.length} ${group.productIds.length===1?'produto':'produtos'} • ${group.ativo?'Visível':'Oculto'}</small></span></button><div class="storefront-order-buttons"><button type="button" data-group-up="${escapeStorefront(group.id)}" ${index===0?'disabled':''} aria-label="Mover para cima">↑</button><button type="button" data-group-down="${escapeStorefront(group.id)}" ${index===groups.length-1?'disabled':''} aria-label="Mover para baixo">↓</button></div></article>`).join(''):'<div class="expense-empty"><span>🗂️</span><p>Nenhum grupo cadastrado.</p></div>';
+    list.querySelectorAll('[data-storefront-group]').forEach(row=>row.querySelector('.storefront-group-select').onclick=()=>{selectedStorefrontGroupId=row.dataset.storefrontGroup;hydrateStorefrontConfig()});
+    const move=(id,direction)=>{const ordered=sortedStorefrontGroups(),index=ordered.findIndex(group=>group.id===id),target=ordered[index+direction];if(index<0||!target)return;const current=ordered[index],order=current.ordem;current.ordem=target.ordem;target.ordem=order;persist();hydrateStorefrontConfig()};
+    list.querySelectorAll('[data-group-up]').forEach(button=>button.onclick=()=>move(button.dataset.groupUp,-1));list.querySelectorAll('[data-group-down]').forEach(button=>button.onclick=()=>move(button.dataset.groupDown,1));
+    main.querySelector('.storefront-new-group').onclick=()=>openModal('Criar grupo do site de pedidos',fieldHTML('Nome do grupo','nome')+optionalFieldHTML('Emoji','emoji','text','🍬'),values=>{const name=values.nome.trim();if(!name)throw Error('Informe o nome do grupo.');if(savedData.storefrontGroups.some(item=>normalizeAIName(item.nome)===normalizeAIName(name)))throw Error('Já existe um grupo com esse nome.');const id=`grupo-${Date.now()}`;savedData.storefrontGroups.push({id,nome:name,emoji:values.emoji.trim()||'🍬',imagem:'',ativo:true,ordem:savedData.storefrontGroups.length,productIds:[]});selectedStorefrontGroupId=id});
+    const group=savedData.storefrontGroups.find(item=>item.id===selectedStorefrontGroupId);empty.classList.toggle('hidden',!!group);form.classList.toggle('hidden',!group);if(!group)return;
+    form.elements.nome.value=group.nome;form.elements.emoji.value=group.emoji||'';form.elements.ativo.checked=group.ativo!==false;pendingStorefrontImage=group.imagem||'';
+    const preview=form.querySelector('.storefront-icon-preview'),removePhoto=form.querySelector('.storefront-remove-photo'),renderPreview=()=>{preview.innerHTML=pendingStorefrontImage?`<img src="${pendingStorefrontImage}" alt="Foto de ${escapeStorefront(group.nome)}">`:`<span>${escapeStorefront(form.elements.emoji.value||'🍬')}</span>`;removePhoto.classList.toggle('hidden',!pendingStorefrontImage)};renderPreview();form.elements.emoji.oninput=renderPreview;
+    const sellable=savedData.produtos.filter(product=>product.tipo!=='Ingrediente'),options=form.querySelector('.storefront-product-options');options.innerHTML=sellable.length?sellable.map(product=>{const id=storefrontProductId(product);return `<label data-product-name="${escapeStorefront(product.nome.toLowerCase())}"><input type="checkbox" value="${escapeStorefront(id)}" ${group.productIds.includes(id)?'checked':''}><span class="storefront-product-icon">${escapeStorefront(product.emoji||'🍬')}</span><span><b>${escapeStorefront(product.nome)}</b><small>${money(product.preco)} • estoque ${(+product.estoque||0).toLocaleString('pt-BR')}</small></span></label>`}).join(''):'<p>Nenhum produto de venda cadastrado.</p>';
+    form.querySelector('.storefront-product-search').oninput=event=>{const search=normalizeAIName(event.target.value);options.querySelectorAll('label').forEach(label=>label.classList.toggle('hidden',!normalizeAIName(label.dataset.productName).includes(search)))};
+    form.querySelector('.storefront-photo-input').onchange=async event=>{const file=event.target.files[0];if(!file)return;try{pendingStorefrontImage=await resizeAvatarImage(file);renderPreview();showToast('Foto pronta. Clique em Salvar e publicar.')}catch(error){showToast(error.message);event.target.value=''}};
+    removePhoto.onclick=()=>{pendingStorefrontImage='';form.querySelector('.storefront-photo-input').value='';renderPreview()};
+    form.onsubmit=event=>{event.preventDefault();const name=form.elements.nome.value.trim(),emoji=form.elements.emoji.value.trim()||'🍬';if(!name)return showToast('Informe o nome do grupo.');if(savedData.storefrontGroups.some(item=>item.id!==group.id&&normalizeAIName(item.nome)===normalizeAIName(name)))return showToast('Já existe um grupo com esse nome.');group.nome=name;group.emoji=emoji;group.imagem=pendingStorefrontImage;group.ativo=form.elements.ativo.checked;group.productIds=[...options.querySelectorAll('input:checked')].map(input=>input.value);persist();hydrateStorefrontConfig();showToast('Grupo salvo e publicado no site de pedidos')};
+    form.querySelector('.storefront-delete-group').onclick=()=>openModal('Excluir grupo',`<div class="cancel-warning wide"><b>Excluir ${escapeStorefront(group.nome)}?</b><span>O grupo desaparecerá do site de pedidos. Os produtos não serão apagados do sistema.</span></div>`,()=>{savedData.storefrontGroups=savedData.storefrontGroups.filter(item=>item.id!==group.id);selectedStorefrontGroupId=null});
   }
   function money(value){return Number(value).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
   function today(){return new Date().toLocaleDateString('pt-BR')}

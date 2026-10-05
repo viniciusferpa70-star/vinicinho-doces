@@ -2,8 +2,8 @@
   const firebaseConfig={apiKey:'AIzaSyBY35RmjCQcfGc0Kj3LZll5J2jHaHooW24',authDomain:'vinicinho-doces-vf70.firebaseapp.com',projectId:'vinicinho-doces-vf70',storageBucket:'vinicinho-doces-vf70.firebasestorage.app',messagingSenderId:'697137577803',appId:'1:697137577803:web:f748d80d4b699a6e98f2ce'};
   firebase.initializeApp(firebaseConfig);
   const db=firebase.firestore(),serverTimestamp=firebase.firestore.FieldValue.serverTimestamp,arrayUnion=firebase.firestore.FieldValue.arrayUnion;
-  const groups=[{name:'Cones Trufados',icon:'🍦'},{name:'Pão de Mel',icon:'🍯'},{name:'Bala de Ninho',icon:'🍬'},{name:'Bolos de pote',icon:'🍰'}];
-  const state={customer:null,products:[],cart:{},orders:[],activeGroup:'',ordersUnsubscribe:null};
+  const fallbackGroups=[{id:'cones-trufados',name:'Cones Trufados',icon:'🍦'},{id:'pao-de-mel',name:'Pão de Mel',icon:'🍯'},{id:'bala-de-ninho',name:'Bala de Ninho',icon:'🍬'},{id:'bolos-de-pote',name:'Bolos de pote',icon:'🍰'}];
+  const state={customer:null,groups:fallbackGroups,products:[],cart:{},orders:[],activeGroup:'',ordersUnsubscribe:null};
   const $=selector=>document.querySelector(selector),money=value=>Number(value||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
   const PIX_KEY='+5517988461563';
   const escape=value=>{const element=document.createElement('div');element.textContent=String(value||'');return element.innerHTML};
@@ -22,15 +22,15 @@
   async function continueGuest(name){const clean=name.trim();if(!clean)throw Error('Digite seu nome.');let key=localStorage.getItem('vinicinho-guest-key');if(!key){key=`guest-${crypto.randomUUID()}`;localStorage.setItem('vinicinho-guest-key',key)}state.customer={key,name:clean,phone:'',registered:false};saveSession();startStore()}
   function startStore(){
     $('#entryScreen').classList.add('hidden');$('#storeScreen').classList.remove('hidden');$('#customerName').textContent=state.customer.name;
-    db.collection('storefront').doc('catalog').onSnapshot(snapshot=>{state.products=(snapshot.data()?.products||[]).filter(product=>product.group);renderGroups();renderProducts()});
+    db.collection('storefront').doc('catalog').onSnapshot(snapshot=>{const catalog=snapshot.data()||{};state.groups=(catalog.groups?.length?catalog.groups:fallbackGroups).sort((a,b)=>(+a.order||0)-(+b.order||0));state.products=(catalog.products||[]).filter(product=>product.groupId||product.group);if(state.activeGroup&&!state.groups.some(group=>group.id===state.activeGroup))state.activeGroup='';renderGroups();renderProducts()});
     state.ordersUnsubscribe?.();state.ordersUnsubscribe=db.collection('storefrontCustomers').doc(state.customer.key).collection('orders').orderBy('createdAt','desc').onSnapshot(snapshot=>{state.orders=snapshot.docs.map(doc=>({id:doc.id,...doc.data()}));renderOrders();updateNotifications()});
   }
   function renderGroups(){
-    $('#groupGrid').innerHTML=groups.map(group=>{const count=state.products.filter(product=>product.group===group.name).length;return `<button class="group-card ${state.activeGroup===group.name?'active':''}" data-group="${escape(group.name)}"><span>${group.icon}</span><b>${escape(group.name)}</b><small>${count} ${count===1?'opção':'opções'}</small></button>`}).join('');
+    $('#groupGrid').innerHTML=state.groups.map(group=>{const count=state.products.filter(product=>(product.groupId||product.group)===group.id||(!product.groupId&&product.group===group.name)).length,visual=group.image?`<span class="group-photo"><img src="${group.image}" alt=""></span>`:`<span>${escape(group.icon||'🍬')}</span>`;return `<button class="group-card ${state.activeGroup===group.id?'active':''}" data-group="${escape(group.id)}">${visual}<b>${escape(group.name)}</b><small>${count} ${count===1?'opção':'opções'}</small></button>`}).join('');
     document.querySelectorAll('[data-group]').forEach(button=>button.onclick=()=>{state.activeGroup=button.dataset.group;renderGroups();renderProducts();$('#productsSection').scrollIntoView({behavior:'smooth'})});
   }
   function renderProducts(){
-    const products=state.products.filter(product=>!state.activeGroup||product.group===state.activeGroup);$('#productsTitle').textContent=state.activeGroup||'Todos os produtos';$('#emptyProducts').classList.toggle('hidden',products.length>0);
+    const active=state.groups.find(group=>group.id===state.activeGroup),products=state.products.filter(product=>!state.activeGroup||(product.groupId||product.group)===state.activeGroup||(!product.groupId&&product.group===active?.name));$('#productsTitle').textContent=active?.name||'Todos os produtos';$('#emptyProducts').classList.toggle('hidden',products.length>0);
     $('#productGrid').innerHTML=products.map(product=>`<article class="product-card"><span class="product-emoji">${escape(product.emoji||'🍬')}</span><div><h3>${escape(product.name)}</h3><p>${escape(product.description||product.group)}</p><strong>${money(product.price)}</strong><span class="stock-label ${product.stock>0?'':'out'}">${product.stock>0?`${product.stock} un. para entrega`:'Disponível por encomenda'}</span></div><button class="add-product" data-add="${escape(product.id)}" aria-label="Adicionar ${escape(product.name)}">+</button></article>`).join('');
     document.querySelectorAll('[data-add]').forEach(button=>button.onclick=()=>addToCart(button.dataset.add));
   }

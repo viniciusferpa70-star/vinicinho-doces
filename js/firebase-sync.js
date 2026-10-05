@@ -33,17 +33,39 @@
     return '';
   }
 
+  function productId(product = {}) {
+    return String(product.id || product.nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  }
+
+  function catalogGroups(payload) {
+    const configured = Array.isArray(payload?.storefrontGroups) ? payload.storefrontGroups : [];
+    if (configured.length) return configured.filter(group => group.ativo !== false).sort((a,b)=>(+a.ordem||0)-(+b.ordem||0)).map((group,index) => ({
+      id: String(group.id || `grupo-${index}`), name: group.nome || 'Grupo', icon: group.emoji || '🍬', image: group.imagem || '', order: index,
+      productIds: Array.isArray(group.productIds) ? group.productIds.map(String) : []
+    }));
+    return [
+      {id:'cones-trufados',name:'Cones Trufados',icon:'🍦',image:'',order:0,productIds:[]},
+      {id:'pao-de-mel',name:'Pão de Mel',icon:'🍯',image:'',order:1,productIds:[]},
+      {id:'bala-de-ninho',name:'Bala de Ninho',icon:'🍬',image:'',order:2,productIds:[]},
+      {id:'bolos-de-pote',name:'Bolos de pote',icon:'🍰',image:'',order:3,productIds:[]}
+    ];
+  }
+
   async function publishCatalog(payload) {
-    const products = (payload?.produtos || []).filter(product => product.tipo !== 'Ingrediente').map(product => ({
-      id: String(product.id || product.nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+    const groups = catalogGroups(payload), configured=Array.isArray(payload?.storefrontGroups)&&payload.storefrontGroups.length>0;
+    const products = (payload?.produtos || []).filter(product => product.tipo !== 'Ingrediente').map(product => {
+      const id=productId(product),group=configured?groups.find(entry=>entry.productIds.includes(id)):groups.find(entry=>entry.name===productGroup(product.nome));
+      return {
+      id,
       name: product.nome || 'Produto',
-      group: productGroup(product.nome),
+      groupId: group?.id || '',
+      group: group?.name || '',
       price: +product.preco || 0,
       stock: Math.max(0, Math.floor(+product.estoque || 0)),
       emoji: product.emoji || '🍬',
       description: product.descricao || ''
-    })).filter(product => product.group);
-    await catalogRef.set({products, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}, {merge: true});
+    }}).filter(product => product.groupId);
+    await catalogRef.set({groups:groups.map(({productIds,...group})=>group),products, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}, {merge: true});
   }
 
   function recordCount(data) {
