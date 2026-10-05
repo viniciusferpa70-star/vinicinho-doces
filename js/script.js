@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     {key:'clientes',page:'Clientes',label:'Cadastro de clientes',description:'Contatos e histórico dos clientes.'},
     {key:'fornecedores',page:'Fornecedores',label:'Cadastro de fornecedores',description:'Fornecedores, contatos e condições de compra.'},
     {key:'pontosVenda',page:'Pontos de Venda',label:'Pontos de venda',description:'Lojas, canais e locais de comercialização.'},
-    {key:'sitePedidos',page:'Site de Pedidos',label:'Configuração do site de pedidos',description:'Grupos, fotos e produtos exibidos no cardápio dos clientes.'},
+    {key:'sitePedidos',page:'Site de Pedidos',label:'Tela do site de pedidos',description:'Ativa a aba para configurar grupos, fotos e produtos do cardápio dos clientes.'},
     {key:'relatorios',page:'Relatórios',label:'Tela de relatórios',description:'Relatórios financeiros, vendas e estoque.'},
     {key:'musicas',page:'Músicas',label:'Músicas e playlists',description:'Importação de músicas e player em todas as telas.'},
     {key:'importarXml',feature:'xml',label:'Importar XML / NFC-e',description:'Importação de compras e identificação de produtos.'},
