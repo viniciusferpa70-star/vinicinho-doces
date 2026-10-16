@@ -5,7 +5,12 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.email == 'viniciusferpa70@gmail.com';
     }
     match /businesses/vinicinho-doces {
-      allow read, write: if owner();
+      allow read: if owner();
+      allow create: if owner() && request.resource.data.syncVersion == 2
+        && request.resource.data.revision == 1 && request.resource.data.updatedAt == request.time;
+      allow update: if owner() && request.resource.data.syncVersion == 2
+        && request.resource.data.revision == resource.data.get('revision', 0) + 1
+        && request.resource.data.updatedAt == request.time;
       match /musicTracks/{track} {
         allow read, write: if owner();
         match /musicChunks/{chunk} {
@@ -19,7 +24,9 @@ service cloud.firestore {
 
     match /storefront/catalog {
       allow read: if true;
-      allow write: if owner();
+      allow write: if owner() && request.resource.data.syncVersion == 2
+        && request.resource.data.revision == getAfter(/databases/$(database)/documents/businesses/vinicinho-doces).data.revision
+        && getAfter(/databases/$(database)/documents/businesses/vinicinho-doces).data.updatedAt == request.time;
     }
 
     match /storefrontCustomers/{customerKey} {

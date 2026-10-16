@@ -9,11 +9,13 @@
       "firestore.*",
       "output/**",
       "tmp/**",
+      "tests/**",
       "**/.*",
       "**/.*/**",
       "**/*.log",
       "**/node_modules/**"
     ],
+    "headers": [{"source":"**/*.html","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]}],
     "cleanUrls": true,
     "trailingSlash": false
   }

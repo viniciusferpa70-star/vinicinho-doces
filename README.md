@@ -4,6 +4,16 @@ Sistema web para controle de vendas, produtos, produção, estoque, clientes, fo
 
 Os dados são sincronizados com o Firebase e o acesso usa a conta Google autorizada.
 
+## Sincronização entre computadores
+
+Os dados operacionais são lidos do servidor Firestore e mantidos apenas em memória durante o uso. A antiga cópia em localStorage é removida após o carregamento bem-sucedido; nunca é importada automaticamente. Apenas a autenticação mantém sua sessão no navegador.
+
+Um listener recebe as alterações de outros computadores. Atualizações de tela aguardam o término de uma edição em andamento. Cada salvamento usa uma transação com versão, aplica somente as diferenças em relação à versão que o usuário editou e publica o catálogo na mesma transação. Alterações simultâneas conflitantes são recusadas, inclusive duas operações que tentem reduzir o mesmo estoque ao mesmo valor. Falhas de conexão não são tratadas como salvamento concluído nem geram fila persistente no navegador.
+
+As regras exigem `syncVersion: 2`, revisão incremental e atualização atômica do catálogo, impedindo versões antigas de sobrescrever o banco. Após a implantação, recarregue as abas abertas nos outros computadores. Não há migração automática de dados divergentes de navegadores antigos para o banco.
+
+Validação: `node --test tests/cloud-sync.test.cjs` cobre dois clientes, edições concorrentes, conflitos de estoque, exclusões, salvamentos em sequência, atualização em tempo real e perda de conexão.
+
 ## Músicas
 
 A aba Músicas permite criar playlists, importar arquivos ou pastas, buscar faixas e ouvir músicas com um player fixo durante a navegação. A importação aceita até 25 MiB por arquivo, conforme os formatos reproduzíveis pelo navegador. O player inclui pausa, anterior/próxima, progresso, volume, aleatório e repetição da playlist.

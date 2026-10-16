@@ -1,12 +1,13 @@
 document.addEventListener('DOMContentLoaded', async () => {
-  try { await window.VinicinhoCloud?.ready; } catch { return; }
+  let cloudData;
+  try { cloudData = await window.VinicinhoCloud.ready; } catch { return; }
   if (window.lucide) lucide.createIcons();
   const main = document.querySelector('main');
   const dashboardHTML = main.innerHTML;
   const sidebar = document.getElementById('sidebar');
   const toast = document.getElementById('toast');
-  const STORAGE_KEY = 'vinicinho-doces-dados-limpos-v2';
-  const savedData = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{"vendas":[],"produtos":[],"despesas":[],"pagamentos":[],"clientes":[],"fornecedores":[]}');
+  const savedData = JSON.parse(JSON.stringify(cloudData));
+  let formDirty = false;
   savedData.usuarios ||= [{id:'user-vinicinho',nome:'Vinicinho',cargo:'Administrador',avatar:'cartoon'}];
   savedData.usuarioAtual ||= savedData.usuarios[0].id;
   savedData.metaDiaria = +savedData.metaDiaria || 100;
@@ -93,6 +94,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   let selectedProduct=null, selectedPoint=null, selectedExpense=null, selectedService=null, selectedStorefrontGroupId=null, pendingStorefrontImage='', runtimeBackupDirectory=null, storefrontOrders=[];
   let toastTimer;
   function showToast(message) {
+    if (window.VinicinhoCloud.blocked) message = 'Alteração não salva. Consulte o aviso do Firebase no topo da tela.';
+    else if (window.VinicinhoCloud.pending && /salv|sucesso|registrad|publicad|concluíd/i.test(message)) message = 'Enviando alteração ao Firebase…';
     toast.textContent = message;
     toast.classList.add('show');
     clearTimeout(toastTimer);
@@ -104,6 +107,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   function pageEnabled(page){const parameter=MODULE_PARAMETERS.find(item=>item.page===page);return !parameter||parameterEnabled(parameter.key)}
   function firstEnabledPage(){return MODULE_PARAMETERS.find(item=>item.page&&pageEnabled(item.page))?.page||'Dashboard'}
   function openPage(page){
+    formDirty = false;
     if(!pageEnabled(page)){showToast('Esta tela está desativada nos parâmetros.');return false}
     document.querySelectorAll('.nav-item').forEach(button=>button.classList.toggle('active',button.dataset.page===page));
     main.innerHTML=page==='Dashboard'?dashboardHTML:pages[page];
@@ -178,8 +182,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     savedData.servicos.forEach(record=>record.caixaId||=accountId);
     savedData.pagamentos.forEach(record=>record.caixaId||=savedData.vendas.find(sale=>sale.id===record.saleId)?.caixaId||accountId);
     savedData.pagamentosDespesas.forEach(record=>record.caixaId||=savedData.despesas.find(expense=>expense.id===record.expenseId)?.caixaId||accountId);
-    localStorage.setItem(STORAGE_KEY,JSON.stringify(savedData));
-    window.VinicinhoCloud?.save(savedData);
+    formDirty = false;
+    const saving = window.VinicinhoCloud.save(savedData);
+    saving.catch(() => {}); // The persistent cloud status reports failure; never claim local success.
+    return saving;
   }
   function escapeStorefront(value){return String(value??'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]))}
   function sortedStorefrontGroups(){return [...savedData.storefrontGroups].sort((a,b)=>(+a.ordem||0)-(+b.ordem||0))}
@@ -235,7 +241,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     wrap.querySelector('.add-service-product')?.addEventListener('click',()=>{const rows=wrap.querySelector('.service-product-rows');rows.insertAdjacentHTML('beforeend',serviceProductRow(rows.children.length));bindServiceProductEditor(wrap)});
     bindServiceProductEditor(wrap);
     const close=()=>wrap.remove();wrap.querySelector('.modal-close').onclick=close;wrap.querySelector('.modal-actions .secondary-btn').onclick=close;wrap.querySelector('.app-modal').addEventListener('click',e=>e.stopPropagation());
-    const form=wrap.querySelector('form');form.addEventListener('submit',e=>e.preventDefault());wrap.querySelector('.modal-save').onclick=()=>{if(!form.reportValidity())return;const values=Object.fromEntries(new FormData(form));try{onSubmit(values);persist();close();refreshCurrentView();showToast('Registro salvo com sucesso')}catch(err){const box=wrap.querySelector('.form-error');box.textContent=err.message;box.classList.remove('hidden')}};
+    const form=wrap.querySelector('form');form.addEventListener('submit',e=>e.preventDefault());wrap.querySelector('.modal-save').onclick=async()=>{if(!form.reportValidity())return;const saveButton=wrap.querySelector('.modal-save');if(saveButton.disabled)return;saveButton.disabled=true;const values=Object.fromEntries(new FormData(form));try{await onSubmit(values);await persist();close();refreshCurrentView();showToast('Registro salvo com sucesso')}catch(err){const box=wrap.querySelector('.form-error');box.textContent=err.message;box.classList.remove('hidden')}finally{saveButton.disabled=false}};
   }
   function handleAction(action,button){
     if(action==='Criar cardápio'){if(!parameterEnabled('cardapios'))return showToast('A criação de cardápios está desativada nos parâmetros.');return window.VinicinhoMenuEditor.open({data:savedData.cardapios,products:savedData.produtos,save:cardapios=>{savedData.cardapios=cardapios;persist()}})}
@@ -493,15 +499,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   function openEditUser(index){const user=savedData.usuarios[index];if(!user)return showToast('Usuário não encontrado');let uploadedAvatar='';const currentPreview=isImageAvatar(user.avatar)?`<img src="${user.avatar}" alt="Avatar atual">`:`<span>${user.avatar==='cartoon'?'👤':user.avatar}</span>`;openModal(`Editar usuário — ${user.nome}`,fieldHTML('Nome do usuário','nome','text',user.nome)+optionalFieldHTML('Cargo','cargo','text',user.cargo||'')+`<div class="modal-field"><label>Alterar avatar</label><select name="avatar"><option value="__keep__">Manter avatar atual</option><option>👨🏽‍🍳</option><option>👩🏽‍🍳</option><option>👨🏽</option><option>👩🏽</option><option>🧑🏽</option><option>🧁</option><option>🍫</option><option>🍭</option></select></div><div class="modal-field avatar-upload-field"><label>Importar nova imagem</label><input class="edit-avatar-file" type="file" accept="image/png,image/jpeg,image/webp"><div class="avatar-preview edit-avatar-preview">${currentPreview}</div><small class="edit-avatar-status">PNG, JPG ou WebP — máximo 10 MB</small></div>`,values=>{if(!values.nome.trim())throw Error('O nome do usuário é obrigatório.');user.nome=values.nome.trim();user.cargo=values.cargo.trim()||'Usuário';if(uploadedAvatar)user.avatar=uploadedAvatar;else if(values.avatar!=='__keep__')user.avatar=values.avatar;applyCurrentUser()},);const modal=document.querySelector('.modal-backdrop'),input=modal.querySelector('.edit-avatar-file'),preview=modal.querySelector('.edit-avatar-preview'),status=modal.querySelector('.edit-avatar-status');input.onchange=async()=>{const file=input.files[0];if(!file)return;status.textContent='Processando imagem...';try{uploadedAvatar=await resizeAvatarImage(file);preview.innerHTML=`<img src="${uploadedAvatar}" alt="Prévia do novo avatar">`;status.textContent='Nova imagem pronta para salvar'}catch(error){uploadedAvatar='';status.textContent=error.message;input.value=''}}}
   function downloadBackup(prefix='vinicinho-doces-backup'){savedData.ultimoBackup=new Date().toISOString();persist();const payload={app:'Vinicinho Doces ERP',version:1,exportedAt:savedData.ultimoBackup,data:savedData},blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a'),date=new Date().toISOString().slice(0,10);link.href=url;link.download=`${prefix}-${date}.json`;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);showToast('Backup completo baixado')}
   function automaticBackupStatus(){return savedData.backupAutomatico.ultimoBackup?`Ativo. Último backup: ${new Date(savedData.backupAutomatico.ultimoBackup).toLocaleString('pt-BR')}`:'Ativo. O primeiro backup será criado automaticamente.'}
-  function backupDatabase(){return new Promise((resolve,reject)=>{const request=indexedDB.open('vinicinho-doces-arquivos',1);request.onupgradeneeded=()=>request.result.createObjectStore('handles');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)})}
-  async function storeBackupDirectory(handle){const db=await backupDatabase();return new Promise((resolve,reject)=>{const tx=db.transaction('handles','readwrite');tx.objectStore('handles').put(handle,'backup-directory');tx.oncomplete=()=>{db.close();resolve()};tx.onerror=()=>{db.close();reject(tx.error)}})}
-  async function getBackupDirectory(){const db=await backupDatabase();return new Promise((resolve,reject)=>{const tx=db.transaction('handles','readonly'),request=tx.objectStore('handles').get('backup-directory');request.onsuccess=()=>{db.close();resolve(request.result||null)};request.onerror=()=>{db.close();reject(request.error)}})}
   async function configureAutomaticBackup(){savedData.backupAutomatico.ativo=true;savedData.backupAutomatico.intervaloMinutos=60;savedData.backupAutomatico.pasta='C:\\Users\\Vinicius\\Desktop\\Sistema Doces\\Backups';persist();await performAutomaticBackup(true);startAutomaticBackupMonitor()}
   async function backupThroughLocalHelper(payload){const response=await fetch('http://127.0.0.1:8125/backup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!response.ok)throw Error('O serviço local recusou o backup.');return response.json()}
   async function performAutomaticBackup(manual=false){if(!savedData.backupAutomatico.ativo)return;const timestamp=new Date(),payload={app:'Vinicinho Doces ERP',version:1,exportedAt:timestamp.toISOString(),automatico:true,data:savedData};try{const result=await backupThroughLocalHelper(payload),fileName=result.arquivo||'arquivo de backup';savedData.backupAutomatico.pasta='C:\\Users\\Vinicius\\Desktop\\Sistema Doces\\Backups';savedData.backupAutomatico.ultimoBackup=timestamp.toISOString();savedData.backupAutomatico.ultimoArquivo=fileName;savedData.backupAutomatico.ultimoErro=null;persist();const status=document.querySelector('.automatic-backup-status');if(status)status.textContent=`${automaticBackupStatus()} Arquivo criado: ${fileName}`;if(manual)showToast(`Backup criado: ${fileName}`)}catch(error){savedData.backupAutomatico.ultimoErro=String(error.message||error);persist();const status=document.querySelector('.automatic-backup-status');if(status)status.textContent=`Falha ao gravar: ${error.message||error}`;if(manual)showToast('Não foi possível gravar o backup. Verifique o serviço local.')}}
   function startAutomaticBackupMonitor(){clearInterval(window.vinicinhoBackupTimer);window.vinicinhoBackupTimer=setInterval(()=>{if(!savedData.backupAutomatico.ativo)return;const last=savedData.backupAutomatico.ultimoBackup?new Date(savedData.backupAutomatico.ultimoBackup).getTime():0;if(Date.now()-last>=60*60*1000)performAutomaticBackup(false)},60*1000);if(savedData.backupAutomatico.ativo){const last=savedData.backupAutomatico.ultimoBackup?new Date(savedData.backupAutomatico.ultimoBackup).getTime():0;if(Date.now()-last>=60*60*1000)setTimeout(()=>performAutomaticBackup(false),1500)}}
   function backupRecordCount(data){return ['vendas','produtos','despesas','clientes','fornecedores','preVendas','servicos','producoes','caixa'].reduce((total,key)=>total+(Array.isArray(data?.[key])?data[key].length:0),0)}
-  function importBackupFile(file){const reader=new FileReader();reader.onerror=()=>showBackupError('Não foi possível ler o arquivo selecionado.');reader.onload=async()=>{try{const parsed=JSON.parse(reader.result),data=parsed?.data||parsed;validateBackup(data);const count=backupRecordCount(data);if(!count)throw Error('Este arquivo de backup está vazio. Escolha um backup que contenha seus cadastros.');const imported={...data,ultimoBackupImportado:new Date().toISOString()};imported.backupAutomatico||={ativo:false,intervaloMinutos:60,pasta:'C:\\Users\\Vinicius\\Desktop\\Sistema Doces\\Backups'};const serialized=JSON.stringify(imported);localStorage.setItem(STORAGE_KEY,serialized);const verification=JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}'),verifiedCount=backupRecordCount(verification);if(verifiedCount!==count)throw Error(`A gravação não foi confirmada. Esperado: ${count}; gravado: ${verifiedCount}.`);await window.VinicinhoCloud?.saveNow(imported);document.querySelector('.modal-backdrop')?.remove();showToast(`Importação concluída: ${verifiedCount} registros sincronizados. Recarregando...`);setTimeout(()=>location.reload(),1800)}catch(error){showBackupError(`Falha na importação: ${error.message||error}`)}};reader.readAsText(file)}
+  function importBackupFile(file){const reader=new FileReader();reader.onerror=()=>showBackupError('Não foi possível ler o arquivo selecionado.');reader.onload=async()=>{try{const parsed=JSON.parse(reader.result),data=parsed?.data||parsed;validateBackup(data);const count=backupRecordCount(data);if(!count)throw Error('Este arquivo de backup está vazio. Escolha um backup que contenha seus cadastros.');const imported={...data,ultimoBackupImportado:new Date().toISOString()};imported.backupAutomatico||={ativo:false,intervaloMinutos:60,pasta:'C:\\Users\\Vinicius\\Desktop\\Sistema Doces\\Backups'};const verification=await window.VinicinhoCloud.saveNow(imported);const verifiedCount=backupRecordCount(verification);document.querySelector('.modal-backdrop')?.remove();showToast(`Importação concluída: ${verifiedCount} registros sincronizados. Recarregando...`);setTimeout(()=>location.reload(),1800)}catch(error){showBackupError(`Falha na importação: ${error.message||error}`)}};reader.readAsText(file)}
   function validateBackup(data){if(!data||typeof data!=='object')throw Error('Arquivo de backup inválido.');const required=['vendas','produtos','despesas','clientes','fornecedores'];required.forEach(key=>{if(!Array.isArray(data[key]))throw Error(`O backup não contém a seção ${key}.`)})}
   function showBackupError(message){const box=document.querySelector('.modal-backdrop .form-error');if(box){box.textContent=message;box.classList.remove('hidden')}else showToast(message)}
   function notifications(){const list=[];storefrontOrders.forEach(order=>list.push({icon:'🛍️',title:`Pedido de ${order.customerName||'cliente'}`,value:`${money(order.total)} • ${storefrontStatus(order.status)}`,type:'storefront',order,unread:order.adminUnread===true||order.status==='novo'}));pendingSales().filter(isOverdue).forEach(x=>list.push({icon:'💰',title:`Conta a receber vencida — ${x.cliente}`,value:money(saleBalance(x))}));pendingExpenses().filter(x=>x.vencimento&&new Date(x.vencimento+'T23:59:59')<new Date()).forEach(x=>list.push({icon:'🧾',title:`Conta a pagar vencida — ${x.fornecedor}`,value:money(payableBalance(x))}));if(todaySalesTotal()>=savedData.metaDiaria)list.unshift({icon:'🏆',title:'Meta diária conquistada!',value:money(todaySalesTotal()),type:'goal'});return list}
@@ -703,4 +706,34 @@ document.addEventListener('DOMContentLoaded', async () => {
   function aiWithTimeout(promise,ms=45000){return Promise.race([promise,new Promise((_,reject)=>setTimeout(()=>reject(Error('Tempo de resposta excedido. Autorize o Puter se a janela de acesso aparecer e tente novamente.')),ms))])}
   async function sendAIMessage(panel){const input=panel.querySelector('textarea'),button=panel.querySelector('.ai-compose button'),question=input.value.trim();if(!question||button.disabled)return;addAIMessage(panel,question,'user');saveAIMessage('user',question);input.value='';button.disabled=true;const loading=addAIMessage(panel,'Pensando…','assistant','pending');try{if(!window.puter?.ai)throw Error('O serviço gratuito de IA não foi carregado. Verifique sua conexão.');const system=`Você é o Assistente Vinicinho e fala português do Brasil. Responda perguntas gerais normalmente e use consultar_sistema para qualquer pergunta sobre dados do negócio. Você pode executar todas as funções disponibilizadas pelas ferramentas. Quando o usuário enviar uma lista com uma ou várias pré-vendas, reúna todos os pedidos em uma única chamada de preparar_pre_vendas_lote; não chame preparar_venda separadamente e não deixe nenhum item da lista de fora. Preserve observações, quantidades, datas, ponto e fornecedor descritos. Para baixar uma conta a receber, use obrigatoriamente baixar_conta_receber; referências como #0064 são válidas e, se o valor não for informado, baixe o saldo total. Para contas a pagar use baixar_conta_pagar. Nunca invente venda, produto ou registro para contornar uma ação. Se faltar apenas forma de pagamento, use Pix; para pré-venda sem data de chegada, a ferramenta usará amanhã. Se faltar outra informação indispensável, explique o que falta. Toda alteração deve abrir a confirmação humana e você nunca deve afirmar que salvou antes dessa confirmação. Trabalhe somente no caixa ativo. Caixa ativo e contexto resumido: ${JSON.stringify(aiSystemSnapshot())}`;const history=currentAIHistory(),messages=[{role:'system',content:system},...history.slice(0,-1).slice(-10),{role:'user',content:question}],response=await aiWithTimeout(puter.ai.chat(messages,{model:'gpt-5-nano',tools:aiTools})),toolCalls=response?.message?.tool_calls||[];let answer='';if(toolCalls.length){const toolMessages=[];for(const call of toolCalls){let result;try{result=await runAITool(call)}catch(error){result=`Erro: ${error.message}`};toolMessages.push({role:'tool',tool_call_id:call.id,content:result})}const finalResponse=await aiWithTimeout(puter.ai.chat([...messages,response.message,...toolMessages],{model:'gpt-5-nano',tools:aiTools}));answer=aiResponseText(finalResponse)}else answer=aiResponseText(response);answer=answer.trim()||'Concluído.';loading.remove();addAIMessage(panel,answer,'assistant');saveAIMessage('assistant',answer)}catch(error){loading.remove();const message=String(error?.message||error),answer=message.includes('auth')?'Entre na conta gratuita do Puter na janela aberta e tente novamente.':`Não consegui responder agora: ${message}`;addAIMessage(panel,answer,'assistant');saveAIMessage('assistant',answer)}finally{button.disabled=false;input.focus()}}
   document.getElementById('aiAssistantButton')?.addEventListener('click',()=>ensureAIPanel().classList.add('open'));
+  main.addEventListener('input', () => { formDirty = true; });
+  main.addEventListener('change', () => { formDirty = true; });
+  window.addEventListener('vinicinho-cloud-saved', () => showToast('Alteração confirmada no Firebase.'));
+  document.getElementById('cloudSyncStatus').querySelector('button').onclick = async () => {
+    if (!confirm('Descartar as alterações que não foram salvas nesta tela e carregar os dados atuais do Firebase?')) return;
+    try { await window.VinicinhoCloud.reload(); } catch(error) { showToast(error.message); }
+  };
+  document.addEventListener('click', event => {
+    if (window.VinicinhoCloud.blocked && event.target.closest('main, .modal-backdrop, .menu-editor')) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      showToast('Atualize os dados do Firebase antes de continuar.');
+    }
+  }, true);
+  window.VinicinhoCloud.bind({
+    read: () => savedData,
+    busy: () => formDirty || !!document.querySelector('.modal-backdrop, dialog[open], .menu-editor') || document.activeElement?.matches('input,textarea,select'),
+    apply: (data, force) => {
+      if (force) { location.reload(); return; }
+      for (const key of Object.keys(savedData)) delete savedData[key];
+      Object.assign(savedData,data);
+      for (const key of ['vendas','produtos','despesas','pagamentos','pagamentosDespesas','clientes','fornecedores','caixa','preVendas','servicos','producoes','cardapios','pontos','storefrontGroups']) savedData[key] ||= [];
+      savedData.parametros = {...defaultParameters,...savedData.parametros};
+      savedData.aiConversas ||= {}; savedData.aiConversasArquivadas ||= {};
+      savedData.backupAutomatico ||= {ativo:false,intervaloMinutos:60};
+      selectedProduct = selectedPoint = selectedExpense = selectedService = null;
+      selectedContact.cliente = selectedContact.fornecedor = null;
+      const active = document.querySelector('.nav-item.active')?.dataset.page || 'Dashboard';
+      openPage(pageEnabled(active) ? active : firstEnabledPage());
+    }
+  });
 });

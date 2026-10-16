@@ -21,8 +21,11 @@
   const dataRef = db.collection('businesses').doc('vinicinho-doces');
   const catalogRef = db.collection('storefront').doc('catalog');
   const STORAGE_KEY = 'vinicinho-doces-dados-limpos-v2';
-  let saveTimer = null;
-  let lastPayload = null;
+  const {clone,equal,merge} = window.VinicinhoMerge;
+  let baseline, latest, binding, pending = 0, stopped = false, lastError = null;
+  let chain = Promise.resolve();
+  let releaseListener;
+  let latestRevision = 0;
 
   function productGroup(name = '') {
     const value = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -51,7 +54,7 @@
     ];
   }
 
-  async function publishCatalog(payload) {
+  function catalogPayload(payload) {
     const groups = catalogGroups(payload), configured=Array.isArray(payload?.storefrontGroups)&&payload.storefrontGroups.length>0;
     const products = (payload?.produtos || []).filter(product => product.tipo !== 'Ingrediente').map(product => {
       const id=productId(product),group=configured?groups.find(entry=>entry.productIds.includes(id)):groups.find(entry=>entry.name===productGroup(product.nome));
@@ -65,13 +68,9 @@
       emoji: product.emoji || '🍬',
       description: product.descricao || ''
     }}).filter(product => product.groupId);
-    await catalogRef.set({groups:groups.map(({productIds,...group})=>group),products, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}, {merge: true});
+    return {groups:groups.map(({productIds,...group})=>group),products, updatedAt: firebase.firestore.FieldValue.serverTimestamp()};
   }
 
-  function recordCount(data) {
-    return ['vendas','produtos','despesas','clientes','fornecedores','preVendas','servicos','producoes','caixa']
-      .reduce((total, key) => total + (Array.isArray(data?.[key]) ? data[key].length : 0), 0);
-  }
 
   function loginScreen(message = '') {
     let screen = document.getElementById('firebaseLoginScreen');
@@ -120,46 +119,117 @@
     });
   }
 
-  async function initialize(localData) {
+  function report(state, message = '') {
+    const node = document.getElementById('cloudSyncStatus');
+    if (node) {
+      node.hidden = state === 'synced' && !message;
+      node.dataset.state = state;
+      node.querySelector('span').textContent = message;
+      node.querySelector('button').hidden = state !== 'error';
+    }
+    window.dispatchEvent(new CustomEvent('vinicinho-cloud-status', {detail:{state,message}}));
+  }
+
+  function deliver() {
+    if (!binding || pending || stopped || !latest) return;
+    if (equal(baseline,latest)) return;
+    if (binding.busy()) {
+      report('waiting','Atualizações recebidas de outro computador. Conclua ou feche a edição para atualizar a tela.');
+      return;
+    }
+    try {
+      const data = merge(baseline,binding.read(),latest);
+      baseline = clone(latest);
+      binding.apply(data);
+      report('synced');
+    } catch(error) {
+      stopped = true; lastError = error;
+      report('error',error.message);
+    }
+  }
+
+  async function initialize() {
+    // Only authentication persists. Business records never use browser storage.
     await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
     await waitForAuthorizedUser();
-    const snapshot = await dataRef.get({source: 'server'});
-    if (snapshot.exists && snapshot.data()?.payload) {
-      const cloudData = snapshot.data().payload;
-      if (recordCount(localData) > recordCount(cloudData)) {
-        await dataRef.set({payload: localData, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), owner: ALLOWED_EMAIL});
-        await publishCatalog(localData);
-        return localData;
+    const snapshot = await dataRef.get({source:'server'});
+    if (!snapshot.exists || !snapshot.data()?.payload) throw Error('O banco de dados não está disponível. Nenhuma cópia local será enviada.');
+    baseline = clone(snapshot.data().payload);
+    latest = clone(baseline);
+    latestRevision = snapshot.data().revision || 0;
+    try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+    releaseListener = dataRef.onSnapshot({includeMetadataChanges:true}, snapshot => {
+      if (snapshot.metadata.hasPendingWrites) return;
+      if (snapshot.metadata.fromCache) {
+        report('offline','Sem confirmação do Firebase. Verifique a conexão antes de salvar.');
+        return;
       }
-      await publishCatalog(cloudData);
-      return cloudData;
-    }
-    await dataRef.set({payload: localData, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), owner: ALLOWED_EMAIL});
-    await publishCatalog(localData);
-    return localData;
+      if (!snapshot.exists || !snapshot.data()?.payload) {
+        stopped = true; lastError = Error('Os dados não estão disponíveis no Firebase.');
+        report('error',lastError.message); return;
+      }
+      const revision = snapshot.data().revision || 0;
+      if (revision < latestRevision) return;
+      latestRevision = revision;
+      latest = clone(snapshot.data().payload);
+      deliver();
+      if (!pending && !stopped && equal(baseline,latest)) report('synced');
+    }, error => { stopped = true; lastError = error; report('error','Não foi possível acompanhar o Firebase. Atualize os dados antes de continuar.'); });
+    return clone(baseline);
   }
 
-  function save(payload) {
-    lastPayload = JSON.parse(JSON.stringify(payload));
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(async () => {
-      try {
-        await dataRef.set({payload: lastPayload, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), owner: ALLOWED_EMAIL});
-        await publishCatalog(lastPayload);
-        window.dispatchEvent(new CustomEvent('vinicinho-cloud-saved'));
-      } catch (error) {
-        console.error('Falha ao sincronizar com o Firebase:', error);
-        window.dispatchEvent(new CustomEvent('vinicinho-cloud-error'));
-      }
-    }, 350);
+  function saveNow(payload) {
+    if (stopped) return Promise.reject(lastError || Error('Atualize os dados do Firebase antes de salvar.'));
+    const before = clone(baseline), target = clone(payload);
+    baseline = clone(target);
+    pending++;
+    report('saving','Salvando no Firebase… Não feche esta página.');
+    const job = chain.then(async () => {
+      if (stopped) throw lastError;
+      if (!navigator.onLine) throw Error('Sem conexão. A alteração não foi salva no Firebase.');
+      const committed = await db.runTransaction(async transaction => {
+        const snapshot = await transaction.get(dataRef);
+        if (!snapshot.exists || !snapshot.data()?.payload) throw Error('Os dados não estão disponíveis no Firebase.');
+        const document = snapshot.data();
+        const merged = merge(before,target,document.payload);
+        const revision = (document.revision || 0) + 1;
+        transaction.set(dataRef, {payload:merged,revision,syncVersion:2,owner:ALLOWED_EMAIL,updatedAt:firebase.firestore.FieldValue.serverTimestamp()}, {merge:true});
+        transaction.set(catalogRef, {...catalogPayload(merged),revision,syncVersion:2}, {merge:true});
+        return {payload:merged,revision};
+      });
+      if (committed.revision >= latestRevision) { latestRevision = committed.revision; latest = clone(committed.payload); }
+      window.dispatchEvent(new CustomEvent('vinicinho-cloud-saved'));
+      return clone(committed.payload);
+    }).catch(error => {
+      stopped = true; lastError = error;
+      report('error', error.code === 'sync/conflict' ? error.message : 'Não foi possível salvar no Firebase. A alteração está somente nesta tela. Verifique a conexão; copie o que precisa antes de recarregar os dados.');
+      window.dispatchEvent(new CustomEvent('vinicinho-cloud-error', {detail:error}));
+      throw error;
+    }).finally(() => {
+      pending--;
+      if (!pending && !stopped) { report('synced'); deliver(); }
+    });
+    chain = job.catch(() => {});
+    return job;
   }
 
-  async function saveNow(payload) {
-    clearTimeout(saveTimer);
-    lastPayload = JSON.parse(JSON.stringify(payload));
-    await dataRef.set({payload: lastPayload, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), owner: ALLOWED_EMAIL});
-    await publishCatalog(lastPayload);
+  function save(payload) { return saveNow(payload); }
+  async function reload() {
+    if (pending) return;
+    const snapshot = await dataRef.get({source:'server'});
+    if (!snapshot.exists || !snapshot.data()?.payload) throw Error('Os dados não estão disponíveis no Firebase.');
+    latest = clone(snapshot.data().payload); baseline = clone(latest);
+    latestRevision = snapshot.data().revision || 0;
+    stopped = false; lastError = null;
+    binding?.apply(clone(latest),true);
+    report('synced');
   }
+  function bind(value) { binding = value; deliver(); }
+  window.addEventListener('beforeunload', event => {
+    if (pending || stopped) { event.preventDefault(); event.returnValue = ''; }
+  });
+  window.addEventListener('offline', () => report('offline','Sem conexão. Os dados não serão salvos até reconectar ao Firebase.'));
+  setInterval(deliver,1000);
 
   function listenStorefrontOrders(callback) {
     return db.collectionGroup('orders').onSnapshot(snapshot => {
@@ -184,16 +254,10 @@
     });
   }
 
-  const localData = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{"vendas":[],"produtos":[],"despesas":[],"pagamentos":[],"clientes":[],"fornecedores":[]}');
-  const ready = initialize(localData).then(data => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    window.dispatchEvent(new CustomEvent('vinicinho-cloud-ready'));
-    return data;
-  }).catch(error => {
+  const ready = initialize().catch(error => {
     console.error('Não foi possível carregar os dados do Firebase:', error);
-    loginScreen(`Não foi possível carregar os dados da nuvem (${error.code || error.message || 'erro desconhecido'}).`);
+    loginScreen(`Não foi possível carregar os dados da nuvem (${error.code || error.message}). Verifique a conexão e recarregue a página.`);
     throw error;
   });
-
-  window.VinicinhoCloud = {ready, initialize, save, saveNow, publishCatalog, listenStorefrontOrders, updateStorefrontOrder, addStorefrontMessage};
+  window.VinicinhoCloud = {ready,save,saveNow,bind,reload,listenStorefrontOrders,updateStorefrontOrder,addStorefrontMessage,get pending(){return pending>0;},get blocked(){return stopped;}};
 })();
